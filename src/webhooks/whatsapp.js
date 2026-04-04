@@ -39,6 +39,12 @@ router.post('/', async (req, res) => {
   try {
     const user = await findOrCreateUser(fromNumber);
 
+    // ── New user — send welcome + app install link first ──
+    if (user._isNew) {
+      await sendMessage(fromNumber, getWelcomeMessage());
+      return;
+    }
+
     // ── Voice message ──
     if (numMedia > 0 && mediaContentType.startsWith('audio/')) {
       await handleVoiceMessage(user, fromNumber, mediaUrl);
@@ -231,6 +237,21 @@ function getHelpMessage() {
 
 📱 *Bank SMS auto-track ke liye:*
 • "app install karo" likhke app link pao`;
+}
+
+function getWelcomeMessage() {
+  const apkUrl = process.env.APK_DOWNLOAD_URL || 'https://github.com/mrsnupan/kharcha-ai/releases/latest/download/app-release-unsigned.apk';
+  return (
+    `🎉 *KharchaAI mein aapka swagat hai!*\n\n` +
+    `Main aapka personal kharcha assistant hoon 💰\n\n` +
+    `*Abhi se shuru karo:*\n` +
+    `• "chai 30" — kharcha log karo\n` +
+    `• "aaj kitna gaya?" — report dekho\n` +
+    `• 🎤 Voice message bhi bhej sakte ho!\n\n` +
+    `📱 *Bank SMS automatic track karne ke liye:*\n` +
+    `App install karo: ${apkUrl}\n\n` +
+    `_"help" likhoge toh poora menu milega_ 😊`
+  );
 }
 
 function getAppInstallMessage() {

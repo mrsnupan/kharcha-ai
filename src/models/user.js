@@ -17,7 +17,7 @@ async function findOrCreateUser(whatsappNumber) {
     .single();
 
   if (fetchErr && fetchErr.code !== 'PGRST116') throw fetchErr; // PGRST116 = row not found
-  if (existing) return existing;
+  if (existing) return { ...existing, _isNew: false };
 
   // Create new user (and a personal family for them)
   const { data: family, error: famErr } = await supabase
@@ -34,7 +34,7 @@ async function findOrCreateUser(whatsappNumber) {
     .single();
   if (userErr) throw userErr;
 
-  return user;
+  return { ...user, _isNew: true };
 }
 
 /**
