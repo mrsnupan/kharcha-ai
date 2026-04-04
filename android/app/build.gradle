@@ -1,0 +1,68 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.kharchaai'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.kharchaai"
+        minSdk 24           // Android 7.0 — covers 95%+ of Indian devices
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+
+        // Server URL — change this to your Railway/production URL
+        buildConfigField "String", "SERVER_URL", "\"https://your-kharcha-ai-url.up.railway.app\""
+
+        // Certificate pinning — get these values by running:
+        // openssl s_client -connect your-server.railway.app:443 < /dev/null 2>/dev/null \
+        //   | openssl x509 -pubkey -noout | openssl pkey -pubin -outform DER \
+        //   | openssl dgst -sha256 -binary | base64
+        buildConfigField "String", "CERT_PIN_PRIMARY", "\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\""
+        buildConfigField "String", "CERT_PIN_BACKUP",  "\"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=\""
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false   // Keep false for easy debugging on user devices
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            buildConfigField "String", "SERVER_URL", "\"http://10.0.2.2:3000\""  // localhost for emulator
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+        viewBinding true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // HTTP client (no Retrofit — keep it lightweight)
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // Encrypted SharedPreferences — hardware-backed key storage
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
+    // Coroutines
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+}

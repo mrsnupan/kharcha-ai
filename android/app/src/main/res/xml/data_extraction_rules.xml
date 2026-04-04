@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Prevents ALL app data from being backed up to Google Cloud.
+  Auth tokens, phone numbers, etc. must never leave the device via backup.
+  Required when android:allowBackup="false".
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="file" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="file" path="." />
+    </device-transfer>
+</data-extraction-rules>

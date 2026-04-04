@@ -1,0 +1,161 @@
+-- KharchaAI Database Schema
+-- Run this in your Supabase SQL editor
+
+-- ============================================================
+-- FAMILIES
+-- ============================================================
+CREATE TABLE IF NOT EXISTS families (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
+-- USERS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS users (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  whatsapp_number   TEXT UNIQUE NOT NULL,  -- "whatsapp:+919876543210"
+  name              TEXT,
+  family_id         UUID REFERENCES families(id) ON DELETE SET NULL,
+  device_token      TEXT,                  -- SHA-256 hash of Android app token
+  token_expires_at  TIMESTAMPTZ,           -- token expiry (30 days from login)
+  consent_given_at  TIMESTAMPTZ,           -- DPDP Act: when user gave consent
+  data_deletion_requested_at TIMESTAMPTZ, -- DPDP Act: erasure request timestamp
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_whatsapp ON users(whatsapp_number);
+CREATE INDEX IF NOT EXISTS idx_users_family   ON users(family_id);
+CREATE INDEX IF NOT EXISTS idx_users_token    ON users(device_token);
+
+-- ============================================================
+-- OTP STORE (replaces in-memory Map — survives server restarts)
+-- Rows auto-cleaned by cleanup job or DELETE on verify
+-- ============================================================
+CREATE TABLE IF NOT EXISTS otp_store (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  phone       TEXT NOT NULL UNIQUE,        -- normalized: +91XXXXXXXXXX
+  otp_hash    TEXT NOT NULL,               -- SHA-256 hash of OTP (never store plaintext)
+  expires_at  TIMESTAMPTZ NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Auto-expire: run this as a cron or let cleanup handle it
+-- CREATE INDEX IF NOT EXISTS idx_otp_expires ON otp_store(expires_at);
+
+-- ============================================================
+-- EXPENSES
+-- ============================================================
+CREATE TABLE IF NOT EXISTS expenses (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  amount           NUMERIC(12, 2) NOT NULL,
+  category         TEXT NOT NULL DEFAULT 'other',
+  description      TEXT,
+  source           TEXT NOT NULL DEFAULT 'chat',  -- 'chat' | 'sms' | 'voice'
+  raw_input        TEXT,                           -- original message (chat/voice transcript only; NOT full bank SMS)
+  transaction_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_expenses_user     ON expenses(user_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_date     ON expenses(transaction_date);
+CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category);
+CREATE INDEX IF NOT EXISTS idx_expenses_source   ON expenses(source);
+
+-- ============================================================
+-- BUDGETS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS budgets (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID REFERENCES users(id) ON DELETE CASCADE,
+  family_id     UUID REFERENCES families(id) ON DELETE CASCADE,
+  category      TEXT NOT NULL DEFAULT 'total',
+  monthly_limit NUMERIC(12, 2) NOT NULL,
+  month         INTEGER NOT NULL,  -- 1–12
+  year          INTEGER NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, category, month, year)
+);
+
+CREATE INDEX IF NOT EXISTS idx_budgets_user  ON budgets(user_id);
+CREATE INDEX IF NOT EXISTS idx_budgets_month ON budgets(month, year);
+
+-- ============================================================
+-- SMS LOGS
+-- Stores only metadata + parsed data — NOT the full raw SMS
+-- (raw SMS contains account numbers — store only what you need)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS sms_logs (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
+  sender_id   TEXT,                        -- e.g. "HDFCBK"
+  parsed_data JSONB,                       -- extracted: amount, description, type, date
+  status      TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'logged' | 'failed' | 'ignored'
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  -- raw_sms intentionally omitted — contains sensitive bank data
+  -- if needed for debugging, add temporarily and delete after
+);
+
+-- ============================================================
+-- AUDIT LOGS  (DPDP Act + CERT-In compliance)
+-- Immutable log of all sensitive actions
+-- CERT-In mandates 180-day log retention
+-- ============================================================
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID REFERENCES users(id) ON DELETE SET NULL,
+  action     TEXT NOT NULL,   -- 'login' | 'logout' | 'expense_create' | 'data_export' | 'data_delete'
+  meta       JSONB,           -- e.g. { phone: "+91XXXXX210" } — always masked
+  ip_hash    TEXT,            -- SHA-256 of IP address (store hash, not raw IP — DPDP)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_user   ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_date   ON audit_logs(created_at);
+
+-- ============================================================
+-- CONSENT LOG  (DPDP Act 2023 — Section 6: Consent)
+-- Every time user gives or withdraws consent
+-- ============================================================
+CREATE TABLE IF NOT EXISTS consent_log (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action     TEXT NOT NULL,   -- 'given' | 'withdrawn'
+  purpose    TEXT NOT NULL,   -- 'expense_tracking' | 'sms_processing' | 'analytics'
+  version    TEXT NOT NULL DEFAULT '1.0',  -- privacy policy version
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
+-- DATA DELETION REQUESTS  (DPDP Act: Right to Erasure)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS deletion_requests (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at TIMESTAMPTZ,
+  status       TEXT NOT NULL DEFAULT 'pending'  -- 'pending' | 'completed'
+);
+
+-- ============================================================
+-- HELPER: get_family_member_ids(family_id)
+-- ============================================================
+CREATE OR REPLACE FUNCTION get_family_member_ids(p_family_id UUID)
+RETURNS TABLE(user_id UUID) AS $$
+  SELECT id FROM users WHERE family_id = p_family_id;
+$$ LANGUAGE sql STABLE;
+
+-- ============================================================
+-- ROW-LEVEL SECURITY (RLS) — users can only see their own data
+-- Enable in Supabase: each table → Authentication → Enable RLS
+-- ============================================================
+-- ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY "own_expenses" ON expenses
+--   FOR ALL USING (auth.uid()::text = user_id::text);
+--
+-- (Uncomment and adapt if using Supabase Auth.
+--  With custom JWT/token auth, enforce at application layer.)

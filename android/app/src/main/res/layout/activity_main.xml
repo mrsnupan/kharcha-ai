@@ -1,0 +1,339 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_light"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="28dp"
+        android:gravity="center_horizontal">
+
+        <!-- Logo / Title -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="48dp"
+            android:text="💰"
+            android:textSize="56sp"
+            android:gravity="center" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="KharchaAI"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="@color/green_dark" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="WhatsApp pe kharcha track karo"
+            android:textSize="14sp"
+            android:textColor="@color/text_secondary"
+            android:gravity="center" />
+
+        <!-- ─── SETUP CARD ─── -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardSetup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="36dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="4dp"
+            app:cardBackgroundColor="@color/white">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="24dp">
+
+                <!-- Step label -->
+                <TextView
+                    android:id="@+id/tvStepLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Step 1 of 2 — Apna number daalo"
+                    android:textSize="12sp"
+                    android:textColor="@color/green_mid"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05" />
+
+                <!-- Phone input (shown in step 1) -->
+                <LinearLayout
+                    android:id="@+id/layoutPhone"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="WhatsApp Number"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_secondary" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etPhone"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="+91 99999 99999"
+                            android:inputType="phone"
+                            android:maxLength="15"
+                            android:textSize="16sp" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Isi WhatsApp pe OTP aayega"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_secondary" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSendOtp"
+                        android:layout_width="match_parent"
+                        android:layout_height="56dp"
+                        android:layout_marginTop="20dp"
+                        android:text="OTP Bhejo"
+                        android:textSize="16sp"
+                        android:backgroundTint="@color/green_dark" />
+
+                </LinearLayout>
+
+                <!-- OTP input (shown in step 2) -->
+                <LinearLayout
+                    android:id="@+id/layoutOtp"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="16dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvOtpSentTo"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="OTP aapke WhatsApp pe bheja gaya hai"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_secondary" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etOtp"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="6-digit OTP"
+                            android:inputType="numberPassword"
+                            android:maxLength="6"
+                            android:textSize="24sp"
+                            android:gravity="center"
+                            android:letterSpacing="0.3" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnVerifyOtp"
+                        android:layout_width="match_parent"
+                        android:layout_height="56dp"
+                        android:layout_marginTop="16dp"
+                        android:text="Verify karo"
+                        android:textSize="16sp"
+                        android:backgroundTint="@color/green_dark" />
+
+                    <TextView
+                        android:id="@+id/tvResendOtp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:layout_gravity="center"
+                        android:text="OTP nahi mila? Dobara bhejo"
+                        android:textSize="12sp"
+                        android:textColor="@color/green_mid"
+                        android:gravity="center" />
+
+                </LinearLayout>
+
+                <!-- Loading indicator -->
+                <ProgressBar
+                    android:id="@+id/progressBar"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginTop="16dp"
+                    android:layout_gravity="center"
+                    android:visibility="gone"
+                    android:indeterminateTint="@color/green_dark" />
+
+                <!-- Error text -->
+                <TextView
+                    android:id="@+id/tvError"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text=""
+                    android:textSize="13sp"
+                    android:textColor="@color/red_error"
+                    android:gravity="center"
+                    android:visibility="gone" />
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- ─── ACTIVE STATE (shown after registration) ─── -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardActive"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="36dp"
+            android:visibility="gone"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="4dp"
+            app:cardBackgroundColor="@color/green_light">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="24dp"
+                android:gravity="center">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="✅"
+                    android:textSize="40sp" />
+
+                <TextView
+                    android:id="@+id/tvActiveTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="KharchaAI Active hai!"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/green_dark" />
+
+                <TextView
+                    android:id="@+id/tvActivePhone"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="+91 XXXXXXXXXX"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_secondary" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="16dp"
+                    android:layout_marginBottom="16dp"
+                    android:background="@color/green_divider" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🏦  Bank SMS automatic log ho raha hai\n💬  WhatsApp pe message bhejo kharcha daalne ke liye\n🎤  Voice message bhi support hai"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_primary"
+                    android:lineSpacingExtra="6dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnOpenWhatsApp"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="20dp"
+                    android:text="WhatsApp pe jaao"
+                    android:textSize="15sp"
+                    android:backgroundTint="@color/whatsapp_green" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnLogout"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="8dp"
+                    android:text="Logout / Reset"
+                    android:textSize="13sp"
+                    app:strokeColor="@color/text_secondary"
+                    android:textColor="@color/text_secondary" />
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- Permission helper card -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardPermission"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:visibility="gone"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:cardBackgroundColor="#FFF8E1">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⚠️ SMS Permission Chahiye"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="#E65100" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Bank SMS forward karne ke liye SMS permission allow karna zaroori hai."
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnGrantPermission"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="12dp"
+                    android:text="Permission Do"
+                    android:textSize="13sp"
+                    android:backgroundTint="#E65100" />
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="24dp"
+            android:text="Aapka data secure hai. Sirf bank SMS forward hoga."
+            android:textSize="11sp"
+            android:textColor="@color/text_secondary"
+            android:gravity="center" />
+
+    </LinearLayout>
+</ScrollView>
