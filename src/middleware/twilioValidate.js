@@ -12,8 +12,8 @@ const twilio = require('twilio');
  * Docs: https://www.twilio.com/docs/usage/webhooks/webhooks-security
  */
 function twilioValidate(req, res, next) {
-  // Skip validation in development/test
-  if (process.env.NODE_ENV !== 'production' && process.env.SKIP_TWILIO_VALIDATION === 'true') {
+  // Skip validation if explicitly disabled (sandbox testing)
+  if (process.env.SKIP_TWILIO_VALIDATION === 'true') {
     return next();
   }
 
