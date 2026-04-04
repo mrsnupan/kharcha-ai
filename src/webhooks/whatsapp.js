@@ -108,7 +108,30 @@ async function handleTextMessage(user, fromNumber, text) {
     return;
   }
 
-  // ── Expense ──
+  // ── Multiple expenses ──
+  if (parsed.type === 'multiple' && Array.isArray(parsed.expenses) && parsed.expenses.length > 0) {
+    const lines = [];
+    for (const exp of parsed.expenses) {
+      if (exp.amount > 0) {
+        const { confirmMsg } = await logExpense({
+          userId: user.id,
+          amount: exp.amount,
+          category: exp.category,
+          description: exp.description,
+          source: 'chat',
+          rawInput: text,
+          toNumber: fromNumber
+        });
+        lines.push(confirmMsg);
+      }
+    }
+    if (lines.length > 0) {
+      await sendMessage(fromNumber, lines.join('\n'));
+    }
+    return;
+  }
+
+  // ── Single expense ──
   if (parsed.is_expense && parsed.amount > 0) {
     const { confirmMsg } = await logExpense({
       userId: user.id,
