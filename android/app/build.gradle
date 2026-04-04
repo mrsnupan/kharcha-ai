@@ -14,15 +14,12 @@ android {
         versionCode 1
         versionName "1.0.0"
 
-        // Server URL — change this to your Railway/production URL
-        buildConfigField "String", "SERVER_URL", "\"https://your-kharcha-ai-url.up.railway.app\""
+        // Server URL
+        buildConfigField "String", "SERVER_URL", "\"https://kharcha-ai-production.up.railway.app\""
 
-        // Certificate pinning — get these values by running:
-        // openssl s_client -connect your-server.railway.app:443 < /dev/null 2>/dev/null \
-        //   | openssl x509 -pubkey -noout | openssl pkey -pubin -outform DER \
-        //   | openssl dgst -sha256 -binary | base64
-        buildConfigField "String", "CERT_PIN_PRIMARY", "\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\""
-        buildConfigField "String", "CERT_PIN_BACKUP",  "\"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=\""
+        // Certificate pinning
+        buildConfigField "String", "CERT_PIN_PRIMARY", "\"YFqPIjP3sxJYnDbmOQa1ClfaGIw+zQlv4P7gTPaYuck=\""
+        buildConfigField "String", "CERT_PIN_BACKUP",  "\"YFqPIjP3sxJYnDbmOQa1ClfaGIw+zQlv4P7gTPaYuck=\""
     }
 
     buildTypes {
