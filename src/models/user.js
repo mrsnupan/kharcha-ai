@@ -82,6 +82,49 @@ async function addFamilyMember(ownerUserId, memberNumber) {
 }
 
 /**
+ * Remove a family member by moving them to their own new family
+ */
+async function removeFamilyMember(ownerUserId, memberNumber) {
+  const number = memberNumber.startsWith('whatsapp:')
+    ? memberNumber
+    : `whatsapp:${memberNumber}`;
+
+  // Get owner to verify they share the same family
+  const { data: owner, error: ownerErr } = await supabase
+    .from('users')
+    .select('family_id')
+    .eq('id', ownerUserId)
+    .single();
+  if (ownerErr) throw ownerErr;
+
+  const { data: member, error: memberErr } = await supabase
+    .from('users')
+    .select('*')
+    .eq('whatsapp_number', number)
+    .single();
+
+  if (memberErr || !member) throw new Error('Number nahi mila family mein');
+  if (member.family_id !== owner.family_id) throw new Error('Ye number aapki family mein nahi hai');
+  if (member.id === ownerUserId) throw new Error('Aap khud ko remove nahi kar sakte');
+
+  // Give them a new solo family
+  const { data: newFamily, error: famErr } = await supabase
+    .from('families')
+    .insert({ name: 'My Family' })
+    .select()
+    .single();
+  if (famErr) throw famErr;
+
+  const { error: updateErr } = await supabase
+    .from('users')
+    .update({ family_id: newFamily.id })
+    .eq('id', member.id);
+  if (updateErr) throw updateErr;
+
+  return member;
+}
+
+/**
  * Get all family members for a given family_id
  */
 async function getFamilyMembers(familyId) {
@@ -111,6 +154,7 @@ module.exports = {
   findOrCreateUser,
   getUserByNumber,
   addFamilyMember,
+  removeFamilyMember,
   getFamilyMembers,
   updateUserName
 };

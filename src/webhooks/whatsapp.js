@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { findOrCreateUser, addFamilyMember } = require('../models/user');
+const { findOrCreateUser, addFamilyMember, removeFamilyMember } = require('../models/user');
 const { understandMessage } = require('../services/claude');
 const { transcribeVoiceMessage } = require('../services/whisper');
 const { logExpense, handleQuery, handleSetBudget } = require('../services/expenses');
@@ -93,6 +93,18 @@ async function handleTextMessage(user, fromNumber, text) {
     await sendMessage(fromNumber,
       `✅ ${parsed.family_number} ko family mein add kar diya! 👨‍👩‍👧‍👦\nAb unka number bhi KharchaAI se connect ho jayega.`
     );
+    return;
+  }
+
+  if (parsed.family_action === 'remove_member' && parsed.family_number) {
+    try {
+      await removeFamilyMember(user.id, parsed.family_number);
+      await sendMessage(fromNumber,
+        `✅ ${parsed.family_number} ko family se remove kar diya.\nUnka data alag ho gaya hai.`
+      );
+    } catch (e) {
+      await sendMessage(fromNumber, `❌ ${e.message}`);
+    }
     return;
   }
 
@@ -232,8 +244,9 @@ function getHelpMessage() {
 • grocery budget 8000
 • total budget 40000
 
-👨‍👩‍👧 *Family add karne ke liye:*
+👨‍👩‍👧 *Family ke liye:*
 • add family member +91XXXXXXXXXX
+• remove family member +91XXXXXXXXXX
 
 📱 *Bank SMS auto-track ke liye:*
 • "app install karo" likhke app link pao`;

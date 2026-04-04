@@ -22,8 +22,8 @@ If the message contains a SINGLE expense or query, return a JSON object:
   "budget_set": <boolean, true if user is setting a budget>,
   "budget_category": <category id if setting a category budget, "total" for total budget, null if not a budget action>,
   "budget_amount": <number if setting a budget, 0 otherwise>,
-  "family_action": <"add_member" | null>,
-  "family_number": <phone number string if adding member e.g. "+919876543210", null otherwise>
+  "family_action": <"add_member" | "remove_member" | null>,
+  "family_number": <phone number string if adding/removing member e.g. "+919876543210", null otherwise>
 }
 
 If the message contains MULTIPLE expenses (e.g. "petrol 500 aur sabzi 300"), return:
@@ -42,6 +42,8 @@ Rules:
 - "grocery pe kitna?" → type:single, is_query:true, query_type:"category", query_category:"grocery"
 - "grocery budget 8000" → type:single, budget_set:true, budget_category:"grocery", budget_amount:8000
 - "add family member +919876543210" → type:single, family_action:"add_member", family_number:"+919876543210"
+- "remove family member +919876543210" → type:single, family_action:"remove_member", family_number:"+919876543210"
+- "unlink +919876543210" → type:single, family_action:"remove_member", family_number:"+919876543210"
 - Convert Hindi amounts: "teen sau" → 300, "paanch hazaar" → 5000, "ek lakh" → 100000
 - All amounts are in Indian Rupees (₹), never dollars
 - Never return anything except valid JSON. No explanations, no markdown.`;
