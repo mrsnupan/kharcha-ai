@@ -5,6 +5,9 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 
+// Trust Railway's proxy (required for correct IP detection and rate limiting)
+app.set('trust proxy', 1);
+
 // ──────────────────────────────────────────────────────────
 // SECURITY HEADERS (helmet)
 // Sets: X-Content-Type-Options, X-Frame-Options, HSTS,
@@ -51,17 +54,16 @@ const globalLimiter = rateLimit({
 });
 app.use(globalLimiter);
 
-// Strict limiter for auth endpoints: 5 per 15 min per IP
+// Strict limiter for auth endpoints: 5 per 15 min per phone
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Bahut zyada OTP requests. 15 minutes baad try karo.' },
-  keyGenerator: (req) => req.body?.phone || req.ip // limit per phone number
+  message: { error: 'Bahut zyada OTP requests. 15 minutes baad try karo.' }
 });
 
-// SMS webhook: 60 per minute per IP (app forwards ~1/min max)
+// SMS webhook: 60 per minute per IP
 const smsLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
