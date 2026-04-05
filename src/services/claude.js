@@ -51,15 +51,25 @@ Rules:
 - "unlink +919876543210" → type:single, family_action:"remove_member", family_number:"+919876543210"
 - "500 ka kirana saman Ashish ko diya" → type:single, khata_action:"credit", khata_customer_name:"Ashish", khata_amount:500, khata_description:"kirana saman"
 - "I gave 500 grocery to Ashish" → type:single, khata_action:"credit", khata_customer_name:"Ashish", khata_amount:500, khata_description:"grocery"
+- "Bhai ko 2000 diye" → type:single, khata_action:"credit", khata_customer_name:"Bhai", khata_amount:2000, khata_description:"personal loan"
+- "Rahul ko 1500 udhaar diya" → type:single, khata_action:"credit", khata_customer_name:"Rahul", khata_amount:1500, khata_description:"udhaar"
+- "Sharma ji ke saath dinner mein 600 diya unka" → type:single, khata_action:"credit", khata_customer_name:"Sharma ji", khata_amount:600, khata_description:"dinner"
+- "Colony trip mein 3000 advance diya Ramesh ko" → type:single, khata_action:"credit", khata_customer_name:"Ramesh", khata_amount:3000, khata_description:"trip advance"
 - "Ashish ne 200 diya" → type:single, khata_action:"payment", khata_customer_name:"Ashish", khata_amount:200, khata_description:"payment received"
 - "Ashish ne 200 rupaye waapis kiye" → type:single, khata_action:"payment", khata_customer_name:"Ashish", khata_amount:200
+- "Bhai ne 500 waapis kiye" → type:single, khata_action:"payment", khata_customer_name:"Bhai", khata_amount:500
+- "Rahul ne paise de diye 1000" → type:single, khata_action:"payment", khata_customer_name:"Rahul", khata_amount:1000
 - "Ashish ka hisaab" or "Ashish ka balance" → type:single, khata_action:"balance", khata_customer_name:"Ashish"
+- "Bhai ko kitna dena hai" → type:single, khata_action:"balance", khata_customer_name:"Bhai"
+- "Rahul ka kitna baaki hai" → type:single, khata_action:"balance", khata_customer_name:"Rahul"
 - "Ashish ki history" or "Ashish ka ledger" → type:single, khata_action:"history", khata_customer_name:"Ashish"
-- "sabka hisaab" or "all customers balance" → type:single, khata_action:"list"
+- "sabka hisaab" or "all customers balance" or "sabka kitna baaki hai" → type:single, khata_action:"list"
+- "kisko kitna dena hai" or "pending dues" → type:single, khata_action:"list"
 - "Ashish ko reminder bhejo" → type:single, khata_action:"reminder", khata_customer_name:"Ashish"
+- "Bhai ko yaad dilao" → type:single, khata_action:"reminder", khata_customer_name:"Bhai"
 - "sabko reminder bhejo" → type:single, khata_action:"reminder", khata_customer_name:null
 - "Ashish ki history download karo" or "Ashish ka PDF" → type:single, khata_action:"download_customer", khata_customer_name:"Ashish"
-- "poora khata download karo" or "full ledger PDF" → type:single, khata_action:"download_all"
+- "poora khata download karo" or "full ledger PDF" or "sab ki list download" → type:single, khata_action:"download_all"
 - "Ashish ka number +919876543210 hai" → type:single, khata_action:"balance", khata_customer_name:"Ashish", khata_customer_mobile:"+919876543210"
 - Convert Hindi amounts: "teen sau" → 300, "paanch hazaar" → 5000, "ek lakh" → 100000
 - All amounts are in Indian Rupees (₹), never dollars

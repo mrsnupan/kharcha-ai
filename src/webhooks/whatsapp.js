@@ -262,14 +262,17 @@ function getHelpMessage() {
 • add family member +91XXXXXXXXXX
 • remove family member +91XXXXXXXXXX
 
-🏪 *Kirana Khata (Ledger):*
+📒 *Khata / Udhaar Tracker:*
+_Kirana shop, friends, family — sab ke liye!_
 • "500 ka saman Ashish ko diya"
-• "Ashish ne 200 diya" (payment)
-• "Ashish ka hisaab" (balance)
-• "sabka hisaab" (all customers)
-• "Ashish ko reminder bhejo"
-• "Ashish ki history download karo"
-• "poora khata download karo"
+• "Bhai ko 2000 diye" / "Rahul ko udhaar diya 1500"
+• "Ashish ne 200 diya" (payment received)
+• "Bhai ne 500 waapis kiye"
+• "Ashish ka hisaab" (check balance)
+• "kisko kitna dena hai" (sabka list)
+• "Ashish ko reminder bhejo" (WhatsApp alert)
+• "Ashish ki history download karo" (Excel)
+• "poora khata download karo" (full list)
 
 📱 *Bank SMS auto-track ke liye:*
 • "app install karo" likhke app link pao`;
@@ -482,6 +485,8 @@ function getWelcomeMessage() {
     `Main aapka personal kharcha assistant hoon 💰\n\n` +
     `*Abhi se shuru karo:*\n` +
     `• "chai 30" — kharcha log karo\n` +
+    `• "Bhai ko 2000 diye" — udhaar track karo\n` +
+    `• "500 ka saman Ashish ko diya" — kirana khata\n` +
     `• "aaj kitna gaya?" — report dekho\n` +
     `• 🎤 Voice message bhi bhej sakte ho!\n\n` +
     `📱 *Bank SMS automatic track karne ke liye:*\n` +
