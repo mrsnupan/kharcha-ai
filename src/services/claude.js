@@ -24,6 +24,11 @@ If the message contains a SINGLE expense or query, return a JSON object:
   "budget_amount": <number if setting a budget, 0 otherwise>,
   "family_action": <"add_member" | "remove_member" | null>,
   "family_number": <phone number string if adding/removing member e.g. "+919876543210", null otherwise>,
+  "income_log": <boolean, true if user is logging income they received>,
+  "income_amount": <number if logging income, 0 otherwise>,
+  "income_category": <one of: salary, freelance, business, rent, investment, transfer, refund, other — null if not income>,
+  "income_description": <description e.g. "April salary", "Freelance project", null otherwise>,
+  "income_query": <boolean, true if asking about income or savings>,
   "khata_action": <"credit" | "payment" | "balance" | "history" | "list" | "reminder" | "download_customer" | "download_all" | null>,
   "khata_customer_name": <customer name string e.g. "Ashish", null if not a khata action>,
   "khata_customer_mobile": <mobile number string e.g. "+919876543210" if mentioned, null otherwise>,
@@ -46,6 +51,12 @@ Rules:
 - "aaj kitna gaya?" → type:single, is_query:true, query_type:"daily"
 - "grocery pe kitna?" → type:single, is_query:true, query_type:"category", query_category:"grocery"
 - "grocery budget 8000" → type:single, budget_set:true, budget_category:"grocery", budget_amount:8000
+- "aaj salary aayi 45000" → type:single, income_log:true, income_amount:45000, income_category:"salary", income_description:"April salary"
+- "freelance ka payment mila 8000" → type:single, income_log:true, income_amount:8000, income_category:"freelance", income_description:"Freelance payment"
+- "rent mila 15000" → type:single, income_log:true, income_amount:15000, income_category:"rent", income_description:"Rent received"
+- "Papa ne 5000 transfer kiye" → type:single, income_log:true, income_amount:5000, income_category:"transfer", income_description:"Transfer from Papa"
+- "is mahine ki income kitni hai" → type:single, income_query:true, query_type:"monthly"
+- "income vs expense dikhao" or "savings kitna hua" → type:single, income_query:true, query_type:"monthly"
 - "add family member +919876543210" → type:single, family_action:"add_member", family_number:"+919876543210"
 - "remove family member +919876543210" → type:single, family_action:"remove_member", family_number:"+919876543210"
 - "unlink +919876543210" → type:single, family_action:"remove_member", family_number:"+919876543210"

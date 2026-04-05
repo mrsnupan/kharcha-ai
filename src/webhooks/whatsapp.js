@@ -14,6 +14,9 @@ const {
   addEntry, getCustomerHistory, getLedgerSummary, getTotalOutstanding
 } = require('../models/khata');
 const {
+  logIncome, getIncomeVsExpense, formatIncomeVsExpense
+} = require('../models/income');
+const {
   exportCustomerExcel, exportFullLedgerExcel,
   exportCustomerPDF, exportFullLedgerPDF, deleteTempFile
 } = require('../services/export');
@@ -113,6 +116,32 @@ async function handleTextMessage(user, fromNumber, text) {
     } catch (e) {
       await sendMessage(fromNumber, `❌ ${e.message}`);
     }
+    return;
+  }
+
+  // ── Income logging ──
+  if (parsed.income_log && parsed.income_amount > 0) {
+    const { confirmMsg } = await logIncome({
+      userId:      user.id,
+      amount:      parsed.income_amount,
+      category:    parsed.income_category || 'other',
+      description: parsed.income_description || 'Income received',
+      source:      'chat'
+    });
+    await sendMessage(fromNumber, confirmMsg);
+    return;
+  }
+
+  // ── Income query / savings ──
+  if (parsed.income_query) {
+    const now = new Date();
+    const summary = await getIncomeVsExpense(user.id, now.getMonth() + 1, now.getFullYear());
+    const msg = formatIncomeVsExpense({
+      ...summary,
+      month: now.getMonth() + 1,
+      year:  now.getFullYear()
+    });
+    await sendMessage(fromNumber, msg);
     return;
   }
 
@@ -261,6 +290,12 @@ function getHelpMessage() {
 👨‍👩‍👧 *Family ke liye:*
 • add family member +91XXXXXXXXXX
 • remove family member +91XXXXXXXXXX
+
+💰 *Income track karo:*
+• "aaj salary aayi 45000"
+• "freelance ka 8000 mila"
+• "rent mila 15000"
+• "income vs expense dikhao" / "savings kitna hua"
 
 📒 *Khata / Udhaar Tracker:*
 _Kirana shop, friends, family — sab ke liye!_

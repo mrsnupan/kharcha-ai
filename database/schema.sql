@@ -142,6 +142,26 @@ CREATE TABLE IF NOT EXISTS deletion_requests (
 );
 
 -- ============================================================
+-- INCOMES — Salary, freelance, rent, any money received
+-- ============================================================
+CREATE TABLE IF NOT EXISTS incomes (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  amount           NUMERIC(12, 2) NOT NULL,
+  category         TEXT NOT NULL DEFAULT 'other',
+                   -- salary | freelance | business | rent | investment | transfer | refund | other
+  description      TEXT,
+  source           TEXT NOT NULL DEFAULT 'chat',   -- 'chat' | 'sms' | 'voice'
+  raw_input        TEXT,
+  transaction_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_incomes_user ON incomes(user_id);
+CREATE INDEX IF NOT EXISTS idx_incomes_date ON incomes(transaction_date);
+CREATE INDEX IF NOT EXISTS idx_incomes_category ON incomes(category);
+
+-- ============================================================
 -- KHATA (LEDGER) — Kirana store credit/debit tracking
 -- ============================================================
 

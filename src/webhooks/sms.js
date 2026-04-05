@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../models/db');
-const { parseSMS, isBankSMS } = require('../services/parser');
+const { parseSMS, isBankSMS, isIncomeSMS } = require('../services/parser');
 const { detectCategory } = require('../utils/categories');
 const { logExpense } = require('../services/expenses');
+const { logIncome, detectIncomeCategory } = require('../models/income');
 const { sendMessage } = require('../services/whatsapp');
 const { getUserByToken } = require('../routes/auth');
 const { maskPhone, maskAccount } = require('../middleware/validate');
@@ -77,31 +78,55 @@ router.post('/', async (req, res) => {
     return;
   }
 
-  // Only track debits (expenses), skip credits
-  if (parsed.transactionType !== 'debit') {
-    console.log('[SMS webhook] Credit transaction, skipping');
-    if (smsLog) await supabase.from('sms_logs').update({ status: 'ignored', parsed_data: parsed }).eq('id', smsLog.id).catch(() => {});
+  const txDate = received_at ? new Date(received_at).toISOString() : parsed.transactionDate;
+
+  // ── CREDIT: check if it's income (salary, freelance, NEFT, etc.) ──
+  if (parsed.transactionType === 'credit') {
+    if (!isIncomeSMS(rawSMS, parsed.amount)) {
+      console.log('[SMS webhook] Small/unrecognised credit — skipping');
+      if (smsLog) await supabase.from('sms_logs').update({ status: 'ignored', parsed_data: parsed }).eq('id', smsLog.id).catch(() => {});
+      return;
+    }
+
+    const incomeCategory = detectIncomeCategory(parsed.description, rawSMS);
+    try {
+      const { confirmMsg } = await logIncome({
+        userId:          user.id,
+        amount:          parsed.amount,
+        category:        incomeCategory,
+        description:     parsed.description,
+        source:          'sms',
+        rawInput:        null,   // never store raw bank SMS (PII)
+        transactionDate: txDate
+      });
+      if (smsLog) await supabase.from('sms_logs').update({ status: 'logged', parsed_data: parsed }).eq('id', smsLog.id).catch(() => {});
+      await sendMessage(user.whatsapp_number, confirmMsg);
+      console.log(`[SMS webhook] Income logged ₹${parsed.amount} (${incomeCategory}) for ${maskPhone(user.whatsapp_number)}`);
+    } catch (err) {
+      console.error('[SMS webhook] Failed to log income:', err.message);
+      if (smsLog) await supabase.from('sms_logs').update({ status: 'failed', parsed_data: { error: err.message } }).eq('id', smsLog.id).catch(() => {});
+    }
     return;
   }
 
-  // Auto-detect category from description
+  // ── DEBIT: log as expense ──
   const catObj = detectCategory(parsed.description);
 
   try {
     const { confirmMsg } = await logExpense({
-      userId: user.id,
-      amount: parsed.amount,
-      category: catObj.id,
-      description: parsed.description,
-      source: 'sms',
-      rawInput: rawSMS,
-      transactionDate: received_at ? new Date(received_at).toISOString() : parsed.transactionDate,
-      toNumber: user.whatsapp_number
+      userId:          user.id,
+      amount:          parsed.amount,
+      category:        catObj.id,
+      description:     parsed.description,
+      source:          'sms',
+      rawInput:        null,
+      transactionDate: txDate,
+      toNumber:        user.whatsapp_number
     });
 
     if (smsLog) await supabase.from('sms_logs').update({ status: 'logged', parsed_data: parsed }).eq('id', smsLog.id).catch(() => {});
     await sendMessage(user.whatsapp_number, confirmMsg);
-    console.log(`[SMS webhook] Logged ₹${parsed.amount} — ${parsed.description} for ${user.whatsapp_number}`);
+    console.log(`[SMS webhook] Expense logged ₹${parsed.amount} — ${parsed.description} for ${maskPhone(user.whatsapp_number)}`);
   } catch (err) {
     console.error('[SMS webhook] Failed to log expense:', err.message);
     if (smsLog) await supabase.from('sms_logs').update({ status: 'failed', parsed_data: { error: err.message } }).eq('id', smsLog.id).catch(() => {});

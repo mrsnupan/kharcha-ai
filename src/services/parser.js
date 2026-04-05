@@ -189,4 +189,46 @@ function isBankSMS(smsText) {
   return bankKeywords.some(kw => lower.includes(kw));
 }
 
-module.exports = { parseSMS, isBankSMS };
+// ──────────────────────────────────────────────────────────
+// Income detection — is this credit SMS a salary/income?
+// Filters out small UPI credits (friend payments, refunds < ₹1000)
+// ──────────────────────────────────────────────────────────
+const INCOME_KEYWORDS = [
+  'salary', 'sal ', 'payroll', 'stipend',           // Salary
+  'neft', 'rtgs',                                    // Bank transfers (usually income)
+  'freelance', 'invoice', 'project pay',             // Freelance
+  'rent received', 'house rent',                     // Rent income
+  'dividend', 'interest credit', 'mf redemption',   // Investment
+  'commission', 'incentive', 'bonus',                // Business
+  'cashback', 'refund', 'reversal'                   // Refunds
+];
+
+const SKIP_CREDIT_KEYWORDS = [
+  'otp', 'tpin', 'linked', 'registered',            // Non-transaction SMS
+  'offer', 'discount', 'reward points'              // Marketing SMS
+];
+
+/**
+ * Check if a credit SMS represents income (salary, freelance, etc.)
+ * Returns true if it should be logged as income.
+ */
+function isIncomeSMS(smsText, amount) {
+  if (!smsText) return false;
+  const lower = smsText.toLowerCase();
+
+  // Skip obvious non-income SMS
+  if (SKIP_CREDIT_KEYWORDS.some(kw => lower.includes(kw))) return false;
+
+  // Explicit income keywords → always log
+  if (INCOME_KEYWORDS.some(kw => lower.includes(kw))) return true;
+
+  // Large credit via NEFT/RTGS (>= ₹5000) → likely income
+  if (amount >= 5000 && (lower.includes('neft') || lower.includes('rtgs') || lower.includes('imps'))) return true;
+
+  // Very large UPI credit (>= ₹10000) → log as transfer income
+  if (amount >= 10000 && lower.includes('upi')) return true;
+
+  return false;
+}
+
+module.exports = { parseSMS, isBankSMS, isIncomeSMS };
