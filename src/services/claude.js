@@ -49,7 +49,19 @@ If the message contains a SINGLE expense or query, return a JSON object:
   "savings_deadline": <deadline string e.g. "31-12-2026", "3 mahine mein", null otherwise>,
   "split_total": <total amount to split e.g. 1200, 0 if not a split>,
   "split_count": <number of people to split between e.g. 4, 0 if not a split>,
-  "split_description": <what it's for e.g. "dinner", "movie", null otherwise>
+  "split_description": <what it's for e.g. "dinner", "movie", null otherwise>,
+  "tax_action": <"log_deduction" | "deduction_summary" | "tax_estimate" | "tax_nudge" | "set_regime" | "set_income_type" | "export_pdf" | "advance_tax" | null>,
+  "tax_section": <"80C" | "80D_self" | "80D_parents" | "80E" | "24b" | "80CCD" | "80G" | "80TTA" | null>,
+  "tax_sub_category": <"ppf" | "elss" | "lic" | "epf" | "home_loan_principal" | "tuition_fees" | "nsc" | "tax_saver_fd" | "nps_80c" | "health_self" | "health_parents" | "education_loan" | "home_loan_interest" | "nps_additional" | null>,
+  "tax_amount": <number if logging a deduction, 0 otherwise>,
+  "tax_description": <description e.g. "LIC premium", "PPF deposit", null otherwise>,
+  "tax_regime": <"old" | "new" | null>,
+  "tax_income_type": <"salaried" | "freelance" | "business" | null>,
+  "gst_action": <"log_expense" | "summary" | null>,
+  "gst_base_amount": <base amount before GST, 0 if not a GST action>,
+  "gst_rate": <5 | 12 | 18 | 28 | null>,
+  "gst_description": <description e.g. "office furniture", null otherwise>,
+  "gst_vendor_gstin": <GSTIN string if mentioned, null otherwise>
 }
 
 If the message contains MULTIPLE expenses (e.g. "petrol 500 aur sabzi 300"), return:
@@ -118,6 +130,27 @@ Rules:
 - "movie 600, 3 log" → type:single, split_total:600, split_count:3, split_description:"movie ticket"
 - "1500 ki party, hum 5 dost the" → type:single, split_total:1500, split_count:5, split_description:"party"
 - "petrol 500 split karo 2 mein" → type:single, split_total:500, split_count:2, split_description:"petrol"
+- "LIC ka premium 15000 bhara" → tax_action:"log_deduction", tax_section:"80C", tax_sub_category:"lic", tax_amount:15000, tax_description:"LIC Premium"
+- "PPF mein 50000 daala" → tax_action:"log_deduction", tax_section:"80C", tax_sub_category:"ppf", tax_amount:50000, tax_description:"PPF Deposit"
+- "ELSS mein 25000 invest kiya" → tax_action:"log_deduction", tax_section:"80C", tax_sub_category:"elss", tax_amount:25000, tax_description:"ELSS Investment"
+- "health insurance ka premium 12000" → tax_action:"log_deduction", tax_section:"80D_self", tax_sub_category:"health_self", tax_amount:12000, tax_description:"Health Insurance"
+- "parents ki health insurance 20000" → tax_action:"log_deduction", tax_section:"80D_parents", tax_sub_category:"health_parents", tax_amount:20000
+- "home loan interest 1.5 lakh diya" → tax_action:"log_deduction", tax_section:"24b", tax_amount:150000, tax_description:"Home Loan Interest"
+- "education loan ka interest 45000" → tax_action:"log_deduction", tax_section:"80E", tax_sub_category:"education_loan", tax_amount:45000
+- "NPS mein 50000 alag se daala" → tax_action:"log_deduction", tax_section:"80CCD", tax_sub_category:"nps_additional", tax_amount:50000
+- "80C mein kitna hua?" or "meri deductions dikhao" → tax_action:"deduction_summary"
+- "tax kitna banega?" or "income tax estimate karo" → tax_action:"tax_estimate"
+- "tax bachaane ke tips" or "tax saving suggestions" → tax_action:"tax_nudge"
+- "old regime choose karna hai" → tax_action:"set_regime", tax_regime:"old"
+- "new regime mein rehna hai" → tax_action:"set_regime", tax_regime:"new"
+- "main freelancer hoon" → tax_action:"set_income_type", tax_income_type:"freelance"
+- "main salaried hoon" → tax_action:"set_income_type", tax_income_type:"salaried"
+- "tax summary PDF download karo" → tax_action:"export_pdf"
+- "advance tax kitna bharna hai?" → tax_action:"advance_tax"
+- "old vs new regime compare karo" → tax_action:"tax_estimate"
+- "18% GST ke saath 5000 ka saman liya" → gst_action:"log_expense", gst_base_amount:5000, gst_rate:18, gst_description:"purchase"
+- "office laptop 80000 + 18 percent GST" → gst_action:"log_expense", gst_base_amount:80000, gst_rate:18, gst_description:"office laptop"
+- "is mahine ka GST dikhao" or "GST input summary" → gst_action:"summary"
 - Convert Hindi amounts: "teen sau" → 300, "paanch hazaar" → 5000, "ek lakh" → 100000
 - All amounts are in Indian Rupees (₹), never dollars
 - Never return anything except valid JSON. No explanations, no markdown.`;

@@ -35,6 +35,16 @@ const {
 } = require('../models/savings');
 const { listReminders } = require('../services/reminderCron');
 const { extractReceiptData } = require('../services/vision');
+const {
+  logDeduction, getDeductionSummary, flattenDeductions,
+  getTaxProfile, updateTaxProfile, getAnnualIncome, formatDeductionSummary
+} = require('../models/taxDeduction');
+const {
+  calcOldRegime, calcNewRegime, compareRegimes, calcAdvanceTaxInstallment,
+  getTaxNudges, getCurrentFY, DEDUCTION_LIMITS, fmtTax, fmt: taxFmt
+} = require('../services/taxEngine');
+const { generateTaxSummaryPDF } = require('../services/taxExport');
+const { logGSTExpense, getGSTSummary, formatGSTSummary } = require('../models/gstExpense');
 
 const MAX_MESSAGE_LENGTH = 1000; // prevent prompt injection via huge messages
 
@@ -238,6 +248,18 @@ async function handleTextMessage(user, fromNumber, text) {
     return;
   }
 
+  // ── Tax actions ──
+  if (parsed.tax_action) {
+    await handleTaxAction(user, fromNumber, parsed);
+    return;
+  }
+
+  // ── GST actions ──
+  if (parsed.gst_action) {
+    await handleGSTAction(user, fromNumber, parsed);
+    return;
+  }
+
   // ── Reminders list ──
   if (lower === 'reminders' || lower === 'reminders dikhao' || lower === 'upcoming reminders') {
     await handleListReminders(user, fromNumber);
@@ -415,6 +437,21 @@ _Kirana shop, friends, family — sab ke liye!_
 • "Ashish ko reminder bhejo" (WhatsApp alert)
 • "Ashish ki history download karo" (Excel)
 • "poora khata download karo" (full list)
+
+🧾 *Tax & Deductions:*
+• "LIC premium 15000" → 80C log
+• "health insurance 12000" → 80D log
+• "home loan interest 1.5 lakh" → 24(b)
+• "80C mein kitna hua?" → deductions summary
+• "tax kitna banega?" → Old vs New regime
+• "tax saving tips" → suggestions
+• "tax summary PDF" → CA ke liye PDF
+• "advance tax kitna bharna hai?"
+• "main freelancer hoon" / "main salaried hoon"
+
+💼 *GST Tracking (Business):*
+• "Office laptop 50000 + 18% GST"
+• "GST summary dikhao"
 
 🏦 *EMI Track karo:*
 • "Home Loan EMI 12000 date 5"
@@ -928,6 +965,290 @@ async function handleListReminders(user, fromNumber) {
   } catch (err) {
     console.error('[Reminders] List error:', err.message);
     await sendMessage(fromNumber, `❌ Reminders load nahi hue. Dobara try karo.`);
+  }
+}
+
+// ──────────────────────────────────────────────────────────
+// TAX HANDLER — All tax actions
+// ──────────────────────────────────────────────────────────
+async function handleTaxAction(user, fromNumber, parsed) {
+  const action = parsed.tax_action;
+  const fy     = getCurrentFY();
+
+  try {
+    const profile = await getTaxProfile(user.id);
+    const isSalaried    = profile.income_type !== 'freelance' && profile.income_type !== 'business';
+    const hasSeniorParent = profile.has_senior_parent || false;
+
+    // ── Set regime preference ──
+    if (action === 'set_regime' && parsed.tax_regime) {
+      await updateTaxProfile(user.id, { taxRegime: parsed.tax_regime });
+      const label = parsed.tax_regime === 'old' ? 'Old Regime' : 'New Regime';
+      await sendMessage(fromNumber,
+        `✅ *${label} set kar diya!*\n\n` +
+        (parsed.tax_regime === 'old'
+          ? `_Old regime mein 80C, 80D, 24(b) ke saath zyada deductions milti hain._`
+          : `_New regime mein slabs kam hain, standard deduction ₹75,000 hai._`) +
+        `\n\n_"tax kitna banega?" — estimate ke liye_`
+      );
+      return;
+    }
+
+    // ── Set income type ──
+    if (action === 'set_income_type' && parsed.tax_income_type) {
+      await updateTaxProfile(user.id, { incomeType: parsed.tax_income_type });
+      const labels = { salaried: 'Salaried', freelance: 'Freelancer', business: 'Business Owner' };
+      await sendMessage(fromNumber,
+        `✅ *Income type set: ${labels[parsed.tax_income_type] || parsed.tax_income_type}*\n\n` +
+        (parsed.tax_income_type !== 'salaried'
+          ? `_Freelancer/Business ke liye advance tax reminders activate ho gaye!\n(June 15, Sep 15, Dec 15, Mar 15)_`
+          : `_Salaried employees ke liye TDS employer kaat leta hai._`) +
+        `\n\n_"tax kitna banega?" — estimate ke liye_`
+      );
+      return;
+    }
+
+    // ── Log a deduction ──
+    if (action === 'log_deduction' && parsed.tax_section && parsed.tax_amount > 0) {
+      await logDeduction({
+        userId:       user.id,
+        section:      parsed.tax_section,
+        subCategory:  parsed.tax_sub_category || null,
+        amount:       parsed.tax_amount,
+        description:  parsed.tax_description || null,
+        financialYear: fy
+      });
+
+      const limit    = DEDUCTION_LIMITS[parsed.tax_section]?.limit;
+      const limitStr = limit ? `₹${taxFmt(limit)}` : 'No limit';
+      const summary  = await getDeductionSummary(user.id, fy, hasSeniorParent);
+      const secTotal = summary[parsed.tax_section]?.logged || parsed.tax_amount;
+      const remaining = limit ? Math.max(0, limit - secTotal) : null;
+
+      await sendMessage(fromNumber,
+        `✅ *${parsed.tax_section} Deduction logged!*\n\n` +
+        `💰 Amount: ₹${taxFmt(parsed.tax_amount)}\n` +
+        `📋 ${parsed.tax_description || parsed.tax_section}\n` +
+        `📅 FY ${fy}\n\n` +
+        `📊 ${parsed.tax_section} total this FY: ₹${taxFmt(secTotal)} / ${limitStr}\n` +
+        (remaining !== null && remaining > 0
+          ? `⚡ ₹${taxFmt(remaining)} abhi baaki hai!\n`
+          : remaining === 0 ? `✅ *Limit full ho gayi!*\n` : '') +
+        `\n_"80C mein kitna hua?" — full summary ke liye_`
+      );
+      return;
+    }
+
+    // ── Deduction summary ──
+    if (action === 'deduction_summary') {
+      const summary = await getDeductionSummary(user.id, fy, hasSeniorParent);
+      await sendMessage(fromNumber, formatDeductionSummary(summary, fy));
+      return;
+    }
+
+    // ── Tax estimate (Old vs New) ──
+    if (action === 'tax_estimate') {
+      const incomeData = await getAnnualIncome(user.id, fy);
+      if (incomeData.total <= 0) {
+        await sendMessage(fromNumber,
+          `❓ *Income log nahi ki abhi tak.*\n\n` +
+          `_Pehle income add karo:_\n` +
+          `_"aaj salary aayi 45000"_\n` +
+          `_"freelance payment 80000 mila"_`
+        );
+        return;
+      }
+
+      const summary    = await getDeductionSummary(user.id, fy, hasSeniorParent);
+      const deductions = flattenDeductions(summary);
+      const comparison = compareRegimes(incomeData.total, deductions, isSalaried, hasSeniorParent);
+
+      const { oldRegime, newRegime, betterRegime, savingsAmount, bothZero } = comparison;
+
+      let msg = `🧮 *Tax Estimate — FY ${fy}*\n\n`;
+      msg += `💰 Annual Income logged: ₹${taxFmt(incomeData.total)}\n\n`;
+      msg += fmtTax(oldRegime) + '\n\n';
+      msg += fmtTax(newRegime) + '\n\n';
+      msg += `━━━━━━━━━━━━━━\n`;
+
+      if (bothZero) {
+        msg += `🎉 *Koi tax nahi!* Dono regimes mein zero tax.\n`;
+      } else {
+        const betterLabel = betterRegime === 'old' ? 'Old Regime' : 'New Regime';
+        msg += `⭐ *${betterLabel} better hai* — ₹${taxFmt(savingsAmount)} bachenge!\n`;
+      }
+
+      msg += `\n_"tax summary PDF" — CA ke liye full report_\n`;
+      msg += `_"tax saving tips" — deductions kaise badhayein_`;
+
+      await sendMessage(fromNumber, msg);
+      return;
+    }
+
+    // ── Tax nudges / saving tips ──
+    if (action === 'tax_nudge') {
+      const incomeData = await getAnnualIncome(user.id, fy);
+      const summary    = await getDeductionSummary(user.id, fy, hasSeniorParent);
+      const dedTotals  = {
+        '80C':         summary['80C']?.logged         || 0,
+        '80D_self':    summary['80D_self']?.logged    || 0,
+        '80D_parents': summary['80D_parents']?.logged || 0,
+        '80E':         summary['80E']?.logged         || 0,
+        '24b':         summary['24b']?.logged         || 0,
+        '80CCD':       summary['80CCD']?.logged       || 0
+      };
+      const nudges = getTaxNudges(incomeData.total, dedTotals, hasSeniorParent);
+
+      await sendMessage(fromNumber,
+        `💡 *Tax Saving Tips — FY ${fy}*\n\n` +
+        nudges.join('\n\n') +
+        `\n\n_"80C mein kitna hua?" — deductions summary_\n` +
+        `_"tax kitna banega?" — current estimate_`
+      );
+      return;
+    }
+
+    // ── Advance tax ──
+    if (action === 'advance_tax') {
+      const incomeData = await getAnnualIncome(user.id, fy);
+      if (incomeData.total <= 0) {
+        await sendMessage(fromNumber,
+          `❓ Income log nahi ki — advance tax calculate nahi ho sakta.\n_Pehle income add karo._`
+        );
+        return;
+      }
+
+      const taxResult = calcNewRegime(incomeData.total, isSalaried);
+      if (taxResult.totalTax < 10000) {
+        await sendMessage(fromNumber,
+          `✅ *Advance tax nahi bharna!*\n\n` +
+          `Aapki tax liability ₹10,000 se kam hai (₹${taxFmt(taxResult.totalTax)}).\n` +
+          `_Advance tax sirf ₹10,000+ liability pe applicable hota hai._`
+        );
+        return;
+      }
+
+      const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
+      const lines = quarters.map(q => {
+        const inst = calcAdvanceTaxInstallment(taxResult.totalTax, q, 0);
+        return `${q} (${inst.dueDate}): *₹${taxFmt(inst.installment)}*`;
+      });
+
+      await sendMessage(fromNumber,
+        `📅 *Advance Tax Schedule — FY ${fy}*\n\n` +
+        `💰 Estimated Annual Tax: ₹${taxFmt(taxResult.totalTax)}\n\n` +
+        lines.join('\n') +
+        `\n\n⚠️ _Advance tax nahi bhari toh Section 234B/234C interest lagta hai!_\n` +
+        `_Apne CA se confirm kar lena._`
+      );
+      return;
+    }
+
+    // ── Export PDF ──
+    if (action === 'export_pdf') {
+      await sendMessage(fromNumber, `⏳ Tax summary PDF generate ho raha hai... thoda wait karo 📄`);
+
+      const incomeData  = await getAnnualIncome(user.id, fy);
+      const summary     = await getDeductionSummary(user.id, fy, hasSeniorParent);
+      const deductions  = flattenDeductions(summary);
+      const comparison  = compareRegimes(incomeData.total, deductions, isSalaried, hasSeniorParent);
+
+      const filePath = await generateTaxSummaryPDF(
+        user, fy, incomeData, summary, comparison, profile
+      );
+
+      await sendFile(fromNumber, filePath, `Tax_Summary_FY${fy.replace('-', '_')}.pdf`);
+      deleteTempFile(filePath);
+      return;
+    }
+
+    await sendMessage(fromNumber,
+      `❓ Tax command samajh nahi aaya.\n\n` +
+      `_Try karo:_\n` +
+      `• "LIC premium 15000"\n` +
+      `• "80C mein kitna hua?"\n` +
+      `• "tax kitna banega?"\n` +
+      `• "tax saving tips"\n` +
+      `• "tax summary PDF"`
+    );
+
+  } catch (err) {
+    console.error('[Tax] Error:', err.message);
+    await sendMessage(fromNumber, `❌ Kuch gadbad ho gayi. Dobara try karo.`);
+  }
+}
+
+// ──────────────────────────────────────────────────────────
+// GST HANDLER — Phase 3
+// ──────────────────────────────────────────────────────────
+async function handleGSTAction(user, fromNumber, parsed) {
+  const action = parsed.gst_action;
+
+  try {
+    // ── Log GST expense ──
+    if (action === 'log_expense' && parsed.gst_base_amount > 0) {
+      const rate      = parsed.gst_rate || 18;
+      const gstAmt    = Math.round(parsed.gst_base_amount * rate / 100 * 100) / 100;
+      const totalAmt  = parsed.gst_base_amount + gstAmt;
+
+      await logGSTExpense({
+        userId:      user.id,
+        baseAmount:  parsed.gst_base_amount,
+        gstRate:     rate,
+        vendorGstin: parsed.gst_vendor_gstin || null,
+        category:    'other',
+        description: parsed.gst_description || 'GST Purchase'
+      });
+
+      // Also log as regular expense (total amount)
+      await logExpense({
+        userId:      user.id,
+        amount:      totalAmt,
+        category:    'other',
+        description: parsed.gst_description || 'GST Purchase',
+        source:      'chat',
+        rawInput:    null,
+        toNumber:    fromNumber
+      });
+
+      await sendMessage(fromNumber,
+        `✅ *GST Expense logged!*\n\n` +
+        `📦 ${parsed.gst_description || 'Purchase'}\n` +
+        `💰 Base Amount: ₹${fmtAmt(parsed.gst_base_amount)}\n` +
+        `🧾 GST (${rate}%): ₹${fmtAmt(gstAmt)}\n` +
+        `━━━━━━━━━━━━━━\n` +
+        `💸 Total Paid: *₹${fmtAmt(totalAmt)}*\n\n` +
+        `_ITC claim ke liye track ho gaya!_\n` +
+        `_"GST summary dikhao" — monthly ITC ke liye_`
+      );
+      return;
+    }
+
+    // ── GST summary ──
+    if (action === 'summary') {
+      const now      = new Date();
+      const fromDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const toDate   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+      const summary  = await getGSTSummary(user.id, fromDate, toDate);
+
+      const fromLabel = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+      const toLabel   = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+        .toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+      await sendMessage(fromNumber, formatGSTSummary(summary, fromLabel, toLabel));
+      return;
+    }
+
+    await sendMessage(fromNumber,
+      `❓ GST command samajh nahi aaya.\n\n` +
+      `_Try karo:_\n` +
+      `• "Office furniture 5000 + 18% GST"\n` +
+      `• "GST summary dikhao"`
+    );
+
+  } catch (err) {
+    console.error('[GST] Error:', err.message);
+    await sendMessage(fromNumber, `❌ Kuch gadbad ho gayi. Dobara try karo.`);
   }
 }
 

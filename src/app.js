@@ -135,8 +135,11 @@ app.listen(PORT, () => {
   startWeeklyReportCron();
 
   // Start daily reminder cron (EMI, recharge, bill alerts — 8 AM IST)
-  const { startReminderCron } = require('./services/reminderCron');
+  const { startReminderCron, startAdvanceTaxCron } = require('./services/reminderCron');
   startReminderCron();
+
+  // Start advance tax cron (freelancers/business — Q1/Q2/Q3/Q4 reminders)
+  startAdvanceTaxCron();
 });
 
 module.exports = app;

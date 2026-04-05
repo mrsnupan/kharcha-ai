@@ -256,8 +256,101 @@ async function listReminders(userId) {
   return data || [];
 }
 
+// ──────────────────────────────────────────────────────────
+// ADVANCE TAX CRON — Phase 3
+// Reminds freelancers/business users 7 days before each due date
+// Q1: June 15 → remind June 8
+// Q2: Sep  15 → remind Sep  8
+// Q3: Dec  15 → remind Dec  8
+// Q4: Mar  15 → remind Mar  8
+// ──────────────────────────────────────────────────────────
+
+function startAdvanceTaxCron() {
+  // All at 02:30 UTC = 08:00 IST
+  cron.schedule('30 2 8 6 *',  () => processAdvanceTaxReminders('Q1'), { timezone: 'UTC' });
+  cron.schedule('30 2 8 9 *',  () => processAdvanceTaxReminders('Q2'), { timezone: 'UTC' });
+  cron.schedule('30 2 8 12 *', () => processAdvanceTaxReminders('Q3'), { timezone: 'UTC' });
+  cron.schedule('30 2 8 3 *',  () => processAdvanceTaxReminders('Q4'), { timezone: 'UTC' });
+  console.log('[AdvanceTax] Cron started — Q1/Q2/Q3/Q4 reminders on 8th of Jun/Sep/Dec/Mar');
+}
+
+const QUARTER_LABELS = {
+  Q1: { dueDate: 'June 15',      cumPct: 0.15 },
+  Q2: { dueDate: 'September 15', cumPct: 0.45 },
+  Q3: { dueDate: 'December 15',  cumPct: 0.75 },
+  Q4: { dueDate: 'March 15',     cumPct: 1.00 }
+};
+
+async function processAdvanceTaxReminders(quarter) {
+  try {
+    console.log(`[AdvanceTax] Processing ${quarter} reminders`);
+
+    // Only for freelance/business users with consent
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, whatsapp_number, name, income_type, tax_regime')
+      .in('income_type', ['freelance', 'business'])
+      .not('consent_given_at', 'is', null);
+
+    if (error || !users?.length) {
+      console.log(`[AdvanceTax] No eligible users for ${quarter}`);
+      return;
+    }
+
+    const { getFYDates, getCurrentFY, calcNewRegime, calcOldRegime } = require('../services/taxEngine');
+    const fy    = getCurrentFY();
+    const dates = getFYDates(fy);
+
+    for (const user of users) {
+      try {
+        // Estimate annual income from last 12 months
+        const { data: incomeRows } = await supabase
+          .from('incomes')
+          .select('amount')
+          .eq('user_id', user.id)
+          .gte('transaction_date', dates.start.toISOString())
+          .lte('transaction_date', dates.end.toISOString());
+
+        const annualIncome = (incomeRows || []).reduce((s, r) => s + Number(r.amount), 0);
+        if (annualIncome <= 0) continue;
+
+        // Estimate tax (use new regime as baseline for non-salaried)
+        const taxResult = calcNewRegime(annualIncome, false);
+        if (taxResult.totalTax < 10000) continue; // Advance tax not applicable < ₹10K
+
+        const info        = QUARTER_LABELS[quarter];
+        const installment = Math.round(taxResult.totalTax * info.cumPct);
+
+        await sendMessage(user.whatsapp_number,
+          `📅 *Advance Tax Reminder — ${quarter}*\n\n` +
+          `⏰ Due Date: *${info.dueDate}*\n\n` +
+          `💰 Estimated Annual Tax: ₹${fmtN(taxResult.totalTax)}\n` +
+          `💸 Cumulative due by ${info.dueDate}: *₹${fmtN(installment)}* (${Math.round(info.cumPct * 100)}%)\n\n` +
+          `_Ye estimate aapki logged income ke aadhar par hai._\n` +
+          `_"advance tax kitna bharna hai?" — full breakdown ke liye_\n` +
+          `_"tax summary PDF download karo" — CA ke liye report_\n\n` +
+          `⚠️ _Advance tax nahi bharoge toh Section 234B/234C interest lag sakta hai!_`
+        );
+
+        console.log(`[AdvanceTax] Sent ${quarter} reminder to user ${user.id}`);
+        await new Promise(r => setTimeout(r, 500)); // small delay between sends
+
+      } catch (userErr) {
+        console.error(`[AdvanceTax] Failed for user ${user.id}:`, userErr.message);
+      }
+    }
+  } catch (err) {
+    console.error(`[AdvanceTax] ${quarter} cron error:`, err.message);
+  }
+}
+
+function fmtN(n) {
+  return Number(n).toLocaleString('en-IN');
+}
+
 module.exports = {
   startReminderCron,
+  startAdvanceTaxCron,
   processReminders,
   addRechargeReminder,
   addCustomReminder,

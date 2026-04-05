@@ -255,6 +255,52 @@ CREATE INDEX IF NOT EXISTS idx_khata_entries_owner    ON khata_entries(owner_id)
 CREATE INDEX IF NOT EXISTS idx_khata_entries_date     ON khata_entries(entry_date);
 
 -- ============================================================
+-- TAX DEDUCTIONS  (80C, 80D, 80E, 24b, 80CCD, 80G, 80TTA)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS tax_deductions (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  section          TEXT NOT NULL,    -- '80C' | '80D_self' | '80D_parents' | '80E' | '24b' | '80CCD' | '80G' | '80TTA'
+  sub_category     TEXT,             -- 'ppf' | 'elss' | 'lic' | 'epf' | 'health_self' | 'education_loan' | etc.
+  amount           NUMERIC(12, 2) NOT NULL,
+  description      TEXT,             -- e.g. "LIC Premium FY 2024-25"
+  financial_year   TEXT NOT NULL DEFAULT '2024-25',  -- '2024-25' | '2025-26'
+  transaction_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_tax_deductions_user ON tax_deductions(user_id);
+CREATE INDEX IF NOT EXISTS idx_tax_deductions_fy   ON tax_deductions(financial_year);
+CREATE INDEX IF NOT EXISTS idx_tax_deductions_sec  ON tax_deductions(section);
+
+-- ============================================================
+-- GST EXPENSES  (Phase 3 — business/freelance users)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS gst_expenses (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  base_amount      NUMERIC(12, 2) NOT NULL,    -- amount BEFORE GST
+  gst_rate         NUMERIC(5, 2) NOT NULL,     -- 5 | 12 | 18 | 28
+  gst_amount       NUMERIC(12, 2) NOT NULL,    -- GST component
+  total_amount     NUMERIC(12, 2) NOT NULL,    -- base + gst
+  vendor_gstin     TEXT,                       -- optional vendor GSTIN
+  invoice_number   TEXT,
+  category         TEXT NOT NULL DEFAULT 'other',
+  description      TEXT,
+  transaction_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_gst_expenses_user ON gst_expenses(user_id);
+CREATE INDEX IF NOT EXISTS idx_gst_expenses_date ON gst_expenses(transaction_date);
+
+-- ============================================================
+-- ADD TAX PROFILE COLUMNS TO USERS
+-- ============================================================
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS tax_regime       TEXT DEFAULT 'new',      -- 'old' | 'new'
+  ADD COLUMN IF NOT EXISTS income_type      TEXT DEFAULT 'salaried', -- 'salaried' | 'freelance' | 'business'
+  ADD COLUMN IF NOT EXISTS has_senior_parent BOOLEAN DEFAULT false;
+
+-- ============================================================
 -- HELPER: get_family_member_ids(family_id)
 -- ============================================================
 CREATE OR REPLACE FUNCTION get_family_member_ids(p_family_id UUID)
