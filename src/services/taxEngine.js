@@ -1,15 +1,21 @@
 /**
  * Tax Engine — Indian Income Tax Calculator
- * FY 2024-25 (AY 2025-26) — Budget 2024 updated slabs
+ * FY 2025-26 (AY 2026-27) — Budget 2025 updated slabs
+ *
+ * Key Budget 2025 changes (effective April 1, 2025):
+ *  - New Regime: completely revised slabs (4L/8L/12L/16L/20L/24L bands)
+ *  - New Regime: 87A rebate ₹60,000 for income up to ₹12L (was ₹25K up to ₹7L)
+ *  - Salaried zero-tax threshold: ₹12.75L (₹12L + ₹75K std deduction)
+ *  - Old Regime: no change
  *
  * Pure computation — zero DB calls. Import and use freely.
  */
 
 // ──────────────────────────────────────────────────────────
-// TAX SLABS — FY 2024-25
+// TAX SLABS — FY 2025-26 (Budget 2025)
 // ──────────────────────────────────────────────────────────
 
-// Old Regime — unchanged from previous years
+// Old Regime — unchanged
 const OLD_SLABS = [
   { upTo: 250000,   rate: 0.00 },
   { upTo: 500000,   rate: 0.05 },
@@ -17,25 +23,29 @@ const OLD_SLABS = [
   { upTo: Infinity, rate: 0.30 }
 ];
 
-// New Regime — Budget 2024 revised slabs (applicable FY 2024-25)
+// New Regime — Budget 2025 revised slabs (FY 2025-26)
+// Major change: zero-tax slab raised to ₹4L, new 25% band added, 87A rebate ₹60K
 const NEW_SLABS = [
-  { upTo: 300000,   rate: 0.00 },
-  { upTo: 700000,   rate: 0.05 },
-  { upTo: 1000000,  rate: 0.10 },
-  { upTo: 1200000,  rate: 0.15 },
-  { upTo: 1500000,  rate: 0.20 },
+  { upTo: 400000,   rate: 0.00 },
+  { upTo: 800000,   rate: 0.05 },
+  { upTo: 1200000,  rate: 0.10 },
+  { upTo: 1600000,  rate: 0.15 },
+  { upTo: 2000000,  rate: 0.20 },
+  { upTo: 2400000,  rate: 0.25 },
   { upTo: Infinity, rate: 0.30 }
 ];
 
 const CESS_RATE = 0.04; // 4% Health & Education Cess
 
 // Section 87A Rebate
-const REBATE_OLD = { maxIncome: 500000,  maxRebate: 12500 };
-const REBATE_NEW = { maxIncome: 700000,  maxRebate: 25000 };
+// Old regime: unchanged — ₹12,500 for income up to ₹5L
+// New regime: Budget 2025 raised to ₹60,000 for income up to ₹12L
+const REBATE_OLD = { maxIncome: 500000,   maxRebate: 12500  };
+const REBATE_NEW = { maxIncome: 1200000,  maxRebate: 60000  };
 
-// Standard deduction (Budget 2024 update)
-const STD_DEDUCTION_OLD = 50000;  // salaried, old regime
-const STD_DEDUCTION_NEW = 75000;  // salaried, new regime (Budget 2024)
+// Standard deduction
+const STD_DEDUCTION_OLD = 50000;  // salaried, old regime — unchanged
+const STD_DEDUCTION_NEW = 75000;  // salaried, new regime — unchanged from Budget 2024
 
 // ──────────────────────────────────────────────────────────
 // DEDUCTION LIMITS (Old Regime)
@@ -208,8 +218,9 @@ function calcOldRegime(grossIncome, deductions = {}, isSalaried = true, hasSenio
 }
 
 /**
- * New Regime tax calculation (Budget 2024).
- * No deductions except standard deduction + NPS employer (not tracked here).
+ * New Regime tax calculation (Budget 2025 — FY 2025-26).
+ * No deductions except standard deduction for salaried.
+ * Key change: zero-tax up to ₹12L (rebate ₹60K), new 25% slab at ₹20L-₹24L.
  */
 function calcNewRegime(grossIncome, isSalaried = true) {
   let taxableIncome = grossIncome;
@@ -357,11 +368,20 @@ function getTaxNudges(annualIncome, deductionTotals = {}, hasSeniorParent = fals
       (deductionTotals['80E'] || 0) + (deductionTotals['24b'] || 0) +
       (deductionTotals['80CCD'] || 0);
 
-    // Old regime benefits when deductions > ~₹2.5L generally
-    if (totalDeductions < 150000 && annualIncome > 700000) {
+    // Budget 2025: New Regime is default & usually better now.
+    // Old regime only wins when deductions are very high (typically >₹3.75L+)
+    if (annualIncome <= 1275000 && annualIncome > 0) {
+      // Salaried with income up to ₹12.75L — likely zero tax under new regime
       nudges.push(
-        `💡 *Regime:* Abhi tak ₹${fmt(totalDeductions)} deductions hain.\n` +
-        `   ₹1.5L se zyada deductions hone par *Old Regime* better ho sakta hai.\n` +
+        `🎉 *Budget 2025:* Income ₹12.75L tak *zero tax* under New Regime!\n` +
+        `   (₹12L rebate + ₹75K standard deduction for salaried)\n` +
+        `   _"tax kitna banega?" — confirm karo_`
+      );
+    } else if (totalDeductions < 375000 && annualIncome > 1275000) {
+      nudges.push(
+        `💡 *Regime Tip:* Abhi tak ₹${fmt(totalDeductions)} deductions hain.\n` +
+        `   New Regime (Budget 2025) zyada logon ke liye better hai ab.\n` +
+        `   Old Regime sirf tab faydemand jab deductions ~₹3.75L+ hoon.\n` +
         `   _"old vs new regime compare karo" — exact comparison ke liye_`
       );
     }
@@ -383,7 +403,7 @@ function fmt(n) {
 }
 
 function fmtTax(result) {
-  const regimeLabel = result.regime === 'old' ? 'Old Regime' : 'New Regime (Budget 2024)';
+  const regimeLabel = result.regime === 'old' ? 'Old Regime' : 'New Regime (Budget 2025)';
   let msg = `📊 *${regimeLabel}*\n`;
   msg += `💰 Gross Income: ₹${fmt(result.grossIncome)}\n`;
   msg += `📉 Standard Deduction: ₹${fmt(result.stdDeduction)}\n`;
