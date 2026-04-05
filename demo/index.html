@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KharchaAI App — UI Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #ECEFF1;
+    font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px;
+  }
+
+  h1 {
+    font-size: 18px;
+    color: #37474F;
+    margin-bottom: 8px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  .subtitle {
+    font-size: 12px;
+    color: #90A4AE;
+    margin-bottom: 32px;
+    letter-spacing: 0.3px;
+  }
+
+  .screens-row {
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .screen-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .screen-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #78909C;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  /* Phone frame */
+  .phone {
+    width: 280px;
+    height: 580px;
+    background: #fff;
+    border-radius: 36px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.10);
+    overflow: hidden;
+    position: relative;
+    border: 7px solid #222;
+  }
+  .phone-notch {
+    width: 80px;
+    height: 20px;
+    background: #222;
+    border-radius: 0 0 14px 14px;
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+  }
+  .phone-screen {
+    width: 100%;
+    height: 100%;
+    background: #F5F5F5;
+    overflow-y: auto;
+    padding-top: 24px;
+    scrollbar-width: none;
+  }
+  .phone-screen::-webkit-scrollbar { display: none; }
+
+  /* Status bar */
+  .status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 16px 0;
+    font-size: 9px;
+    font-weight: 700;
+    color: #333;
+  }
+
+  /* App content */
+  .app-content {
+    padding: 0 16px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .app-logo {
+    font-size: 42px;
+    margin-top: 16px;
+    text-align: center;
+  }
+  .app-name {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1B5E20;
+    margin-top: 6px;
+    text-align: center;
+  }
+  .app-tagline {
+    font-size: 11px;
+    color: #757575;
+    margin-top: 2px;
+    text-align: center;
+  }
+
+  /* Card */
+  .card {
+    width: 100%;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 18px 16px;
+    margin-top: 20px;
+  }
+  .card.active {
+    background: #E8F5E9;
+  }
+  .card.warn {
+    background: #FFF8E1;
+    margin-top: 12px;
+  }
+
+  .step-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #2E7D32;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+  }
+
+  .field-label {
+    font-size: 11px;
+    color: #757575;
+    margin-bottom: 4px;
+  }
+  .field {
+    width: 100%;
+    border: 1.5px solid #BDBDBD;
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-size: 13px;
+    color: #212121;
+    background: #fff;
+    outline: none;
+    margin-bottom: 4px;
+  }
+  .field:focus { border-color: #2E7D32; }
+  .field-hint {
+    font-size: 10px;
+    color: #BDBDBD;
+    margin-bottom: 12px;
+  }
+
+  /* OTP field styling */
+  .field.otp {
+    font-size: 22px;
+    text-align: center;
+    letter-spacing: 12px;
+    font-weight: 700;
+    color: #1B5E20;
+  }
+
+  .btn {
+    width: 100%;
+    padding: 13px;
+    border-radius: 8px;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .btn-primary {
+    background: #1B5E20;
+    color: #fff;
+  }
+  .btn-outline {
+    background: transparent;
+    color: #757575;
+    border: 1.5px solid #BDBDBD;
+    font-size: 12px;
+    margin-top: 6px;
+    padding: 9px;
+  }
+  .btn-whatsapp {
+    background: #25D366;
+    color: #fff;
+    margin-top: 14px;
+  }
+  .btn-warn {
+    background: #E65100;
+    color: #fff;
+    width: auto;
+    padding: 8px 16px;
+    font-size: 12px;
+    margin-top: 10px;
+    border-radius: 6px;
+  }
+
+  .resend {
+    text-align: center;
+    font-size: 11px;
+    color: #2E7D32;
+    margin-top: 10px;
+  }
+
+  /* Active screen */
+  .active-check {
+    font-size: 36px;
+    text-align: center;
+    display: block;
+    margin-bottom: 6px;
+  }
+  .active-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1B5E20;
+    text-align: center;
+  }
+  .active-phone {
+    font-size: 12px;
+    color: #757575;
+    text-align: center;
+    margin-top: 2px;
+  }
+  .divider {
+    width: 100%;
+    height: 1px;
+    background: #C8E6C9;
+    margin: 14px 0;
+  }
+  .feature-list {
+    font-size: 12px;
+    color: #333;
+    line-height: 2;
+  }
+
+  /* Permission card */
+  .warn-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #E65100;
+    margin-bottom: 4px;
+  }
+  .warn-body {
+    font-size: 11px;
+    color: #757575;
+    line-height: 1.5;
+  }
+
+  .footer-note {
+    font-size: 10px;
+    color: #BDBDBD;
+    text-align: center;
+    margin-top: 14px;
+    line-height: 1.5;
+  }
+
+  /* OTP sent label */
+  .otp-sent-label {
+    font-size: 11px;
+    color: #757575;
+    margin-bottom: 10px;
+    line-height: 1.5;
+  }
+
+  /* progress */
+  .progress-dots {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    margin-top: 10px;
+  }
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #C8E6C9;
+  }
+  .dot.active { background: #1B5E20; }
+
+  /* notification bar on active screen */
+  .notif-bar {
+    background: #1B5E20;
+    color: #fff;
+    font-size: 9px;
+    padding: 5px 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 0;
+    border-radius: 0 0 8px 8px;
+    margin: 0 0 12px;
+  }
+  .notif-dot { width: 5px; height: 5px; border-radius: 50%; background: #69F0AE; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<h1>KharchaAI Android App</h1>
+<p class="subtitle">UI Mockup — 3 screens</p>
+
+<div class="screens-row">
+
+  <!-- SCREEN 1: Phone Entry -->
+  <div class="screen-wrap">
+    <div class="screen-label">Screen 1 — Register</div>
+    <div class="phone">
+      <div class="phone-notch"></div>
+      <div class="phone-screen">
+        <div class="status-bar"><span>9:41</span><span>▮▮▮ WiFi 🔋</span></div>
+        <div class="app-content">
+          <div class="app-logo">💰</div>
+          <div class="app-name">KharchaAI</div>
+          <div class="app-tagline">WhatsApp pe kharcha track karo</div>
+
+          <div class="card">
+            <div class="step-label">Step 1 of 2 — Apna number daalo</div>
+            <div class="field-label">WhatsApp Number</div>
+            <input class="field" type="tel" value="+91 98765 43210" readonly />
+            <div class="field-hint">Isi WhatsApp pe OTP aayega</div>
+            <button class="btn btn-primary">OTP Bhejo</button>
+          </div>
+
+          <div class="progress-dots">
+            <div class="dot active"></div>
+            <div class="dot"></div>
+          </div>
+
+          <div class="footer-note">Aapka data secure hai.<br>Sirf bank SMS forward hoga.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 2: OTP Verify -->
+  <div class="screen-wrap">
+    <div class="screen-label">Screen 2 — OTP Verify</div>
+    <div class="phone">
+      <div class="phone-notch"></div>
+      <div class="phone-screen">
+        <div class="status-bar"><span>9:41</span><span>▮▮▮ WiFi 🔋</span></div>
+        <div class="app-content">
+          <div class="app-logo">💰</div>
+          <div class="app-name">KharchaAI</div>
+          <div class="app-tagline">WhatsApp pe kharcha track karo</div>
+
+          <div class="card">
+            <div class="step-label">Step 2 of 2 — OTP enter karo</div>
+            <div class="otp-sent-label">OTP aapke WhatsApp pe bheja gaya:<br><strong>+91 98765 43210</strong></div>
+            <input class="field otp" type="text" value="4 8 2 1 9 3" readonly />
+            <button class="btn btn-primary" style="margin-top:14px;">Verify karo ✓</button>
+            <div class="resend">OTP nahi mila? Dobara bhejo</div>
+          </div>
+
+          <div class="progress-dots">
+            <div class="dot"></div>
+            <div class="dot active"></div>
+          </div>
+
+          <div class="footer-note">OTP 10 minutes mein expire ho jaata hai.<br>Kisi se share mat karo.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 3: Active (post-registration) -->
+  <div class="screen-wrap">
+    <div class="screen-label">Screen 3 — Active</div>
+    <div class="phone">
+      <div class="phone-notch"></div>
+      <div class="phone-screen">
+        <div class="status-bar" style="background:#fff;"><span>9:41</span><span>▮▮▮ WiFi 🔋</span></div>
+        <div class="notif-bar">
+          <div class="notif-dot"></div>
+          KharchaAI — Expense tracking active ✅
+        </div>
+        <div class="app-content" style="padding-top:0;">
+          <div class="app-logo" style="margin-top:4px;">💰</div>
+          <div class="app-name">KharchaAI</div>
+          <div class="app-tagline">WhatsApp pe kharcha track karo</div>
+
+          <div class="card active">
+            <span class="active-check">✅</span>
+            <div class="active-title">Namaste, Jitendra! ✅</div>
+            <div class="active-phone">+91 98765 43210</div>
+            <div class="divider"></div>
+            <div class="feature-list">
+              🏦&nbsp; Bank SMS automatic log ho raha hai<br>
+              💬&nbsp; WhatsApp pe message bhejo<br>
+              🎤&nbsp; Voice message bhi support hai
+            </div>
+            <button class="btn btn-whatsapp">WhatsApp pe jaao</button>
+            <button class="btn btn-outline">Logout / Reset</button>
+          </div>
+
+          <div class="card warn">
+            <div class="warn-title">⚠️ SMS Permission Chahiye</div>
+            <div class="warn-body">Bank SMS forward karne ke liye SMS permission allow karna zaroori hai.</div>
+            <button class="btn btn-warn">Permission Do</button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

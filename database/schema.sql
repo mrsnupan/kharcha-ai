@@ -142,6 +142,42 @@ CREATE TABLE IF NOT EXISTS deletion_requests (
 );
 
 -- ============================================================
+-- KHATA (LEDGER) — Kirana store credit/debit tracking
+-- ============================================================
+
+-- Customers of a kirana shop owner
+CREATE TABLE IF NOT EXISTS khata_customers (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,  -- shop owner's user id
+  name         TEXT NOT NULL,              -- customer name e.g. "Ashish"
+  mobile       TEXT,                       -- customer WhatsApp: "+919876543210"
+  total_due    NUMERIC(12, 2) DEFAULT 0,   -- running balance (positive = customer owes)
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_khata_customers_owner  ON khata_customers(owner_id);
+CREATE INDEX IF NOT EXISTS idx_khata_customers_mobile ON khata_customers(mobile);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_khata_customers_owner_name ON khata_customers(owner_id, LOWER(name));
+
+-- Individual credit/debit entries per customer
+CREATE TABLE IF NOT EXISTS khata_entries (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id  UUID NOT NULL REFERENCES khata_customers(id) ON DELETE CASCADE,
+  owner_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type         TEXT NOT NULL CHECK (type IN ('credit', 'payment')),
+                                           -- credit = gave goods/loan (customer owes more)
+                                           -- payment = received money (customer owes less)
+  amount       NUMERIC(12, 2) NOT NULL,
+  description  TEXT,                       -- e.g. "kirana saman", "diwali advance"
+  entry_date   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_khata_entries_customer ON khata_entries(customer_id);
+CREATE INDEX IF NOT EXISTS idx_khata_entries_owner    ON khata_entries(owner_id);
+CREATE INDEX IF NOT EXISTS idx_khata_entries_date     ON khata_entries(entry_date);
+
+-- ============================================================
 -- HELPER: get_family_member_ids(family_id)
 -- ============================================================
 CREATE OR REPLACE FUNCTION get_family_member_ids(p_family_id UUID)

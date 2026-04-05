@@ -5,10 +5,18 @@ const { findOrCreateUser, addFamilyMember, removeFamilyMember } = require('../mo
 const { understandMessage } = require('../services/claude');
 const { transcribeVoiceMessage } = require('../services/whisper');
 const { logExpense, handleQuery, handleSetBudget } = require('../services/expenses');
-const { sendMessage } = require('../services/whatsapp');
+const { sendMessage, sendFile } = require('../services/whatsapp');
 const { formatVoiceConfirmation } = require('../utils/formatter');
 const twilioValidate = require('../middleware/twilioValidate');
 const { maskPhone } = require('../middleware/validate');
+const {
+  findOrCreateCustomer, findCustomerByName,
+  addEntry, getCustomerHistory, getLedgerSummary, getTotalOutstanding
+} = require('../models/khata');
+const {
+  exportCustomerExcel, exportFullLedgerExcel,
+  exportCustomerPDF, exportFullLedgerPDF, deleteTempFile
+} = require('../services/export');
 
 const MAX_MESSAGE_LENGTH = 1000; // prevent prompt injection via huge messages
 
@@ -105,6 +113,12 @@ async function handleTextMessage(user, fromNumber, text) {
     } catch (e) {
       await sendMessage(fromNumber, `❌ ${e.message}`);
     }
+    return;
+  }
+
+  // ── Khata (Kirana ledger) actions ──
+  if (parsed.khata_action) {
+    await handleKhataAction(user, fromNumber, parsed);
     return;
   }
 
@@ -248,8 +262,217 @@ function getHelpMessage() {
 • add family member +91XXXXXXXXXX
 • remove family member +91XXXXXXXXXX
 
+🏪 *Kirana Khata (Ledger):*
+• "500 ka saman Ashish ko diya"
+• "Ashish ne 200 diya" (payment)
+• "Ashish ka hisaab" (balance)
+• "sabka hisaab" (all customers)
+• "Ashish ko reminder bhejo"
+• "Ashish ki history download karo"
+• "poora khata download karo"
+
 📱 *Bank SMS auto-track ke liye:*
 • "app install karo" likhke app link pao`;
+}
+
+// ──────────────────────────────────────────────────────────
+// KHATA HANDLER
+// ──────────────────────────────────────────────────────────
+async function handleKhataAction(user, fromNumber, parsed) {
+  const action       = parsed.khata_action;
+  const customerName = parsed.khata_customer_name;
+  const mobile       = parsed.khata_customer_mobile;
+  const amount       = Number(parsed.khata_amount || 0);
+  const description  = parsed.khata_description || '';
+
+  try {
+    // ── Credit: gave goods to customer ──
+    if (action === 'credit' && customerName && amount > 0) {
+      const { customer, isNew } = await findOrCreateCustomer(user.id, customerName, mobile);
+      await addEntry(user.id, customer.id, 'credit', amount, description);
+      const newDue = Number(customer.total_due || 0) + amount;
+      await sendMessage(fromNumber,
+        `✅ *Kharcha logged!*\n\n` +
+        `👤 Customer: *${customer.name}*\n` +
+        `💸 Diya: ₹${amount.toFixed(2)}\n` +
+        `📦 ${description || 'saman'}\n` +
+        `━━━━━━━━━━━━━━\n` +
+        `📊 Total bakaya: *₹${newDue.toFixed(2)}*` +
+        (isNew ? `\n\n_Naya customer add kiya gaya ✨_` : '')
+      );
+      return;
+    }
+
+    // ── Payment: received money from customer ──
+    if (action === 'payment' && customerName && amount > 0) {
+      const customer = await findCustomerByName(user.id, customerName);
+      if (!customer) {
+        await sendMessage(fromNumber, `❌ "${customerName}" naam ka koi customer nahi mila.\n"sabka hisaab" type karo list dekhne ke liye.`);
+        return;
+      }
+      await addEntry(user.id, customer.id, 'payment', amount, description || 'payment received');
+      const newDue = Math.max(0, Number(customer.total_due || 0) - amount);
+      await sendMessage(fromNumber,
+        `✅ *Payment received!*\n\n` +
+        `👤 Customer: *${customer.name}*\n` +
+        `💰 Mila: ₹${amount.toFixed(2)}\n` +
+        `━━━━━━━━━━━━━━\n` +
+        `📊 Remaining bakaya: *₹${newDue.toFixed(2)}*` +
+        (newDue === 0 ? '\n\n🎉 Poora hisaab saaf!' : '')
+      );
+      return;
+    }
+
+    // ── Balance: check a customer's due ──
+    if (action === 'balance' && customerName) {
+      const customer = await findCustomerByName(user.id, customerName);
+      if (!customer) {
+        await sendMessage(fromNumber, `❌ "${customerName}" naam ka koi customer nahi mila.`);
+        return;
+      }
+      const due = Number(customer.total_due || 0);
+      await sendMessage(fromNumber,
+        `📊 *${customer.name} ka Hisaab*\n\n` +
+        `📱 Mobile: ${customer.mobile || 'N/A'}\n` +
+        `💰 Bakaya: *₹${due.toFixed(2)}*\n` +
+        (due > 0 ? `\n_Unhe reminder bhejne ke liye:_\n_"${customer.name} ko reminder bhejo"_` :
+          `\n✅ Koi bakaya nahi!`)
+      );
+      return;
+    }
+
+    // ── History: full transaction list for customer ──
+    if (action === 'history' && customerName) {
+      const customer = await findCustomerByName(user.id, customerName);
+      if (!customer) {
+        await sendMessage(fromNumber, `❌ "${customerName}" naam ka koi customer nahi mila.`);
+        return;
+      }
+      const entries = await getCustomerHistory(customer.id, 20);
+      if (entries.length === 0) {
+        await sendMessage(fromNumber, `📭 ${customer.name} ki koi history nahi mili.`);
+        return;
+      }
+      const lines = entries.slice(0, 10).map(e => {
+        const sign = e.type === 'credit' ? '🔴 Diya' : '🟢 Liya';
+        const d = new Date(e.entry_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+        return `${sign} ₹${Number(e.amount).toFixed(0)} — ${e.description || ''} (${d})`;
+      });
+      await sendMessage(fromNumber,
+        `📜 *${customer.name} ki History*\n\n` +
+        lines.join('\n') +
+        `\n━━━━━━━━━━━━━━\n` +
+        `💰 Total bakaya: *₹${Number(customer.total_due).toFixed(2)}*\n\n` +
+        `_Download ke liye: "${customer.name} ka PDF"_`
+      );
+      return;
+    }
+
+    // ── List: all customers with balances ──
+    if (action === 'list') {
+      const customers = await getLedgerSummary(user.id);
+      if (customers.length === 0) {
+        await sendMessage(fromNumber, `📭 Abhi koi customer nahi hai.\n\n_"500 ka saman Ashish ko diya" se shuru karo_`);
+        return;
+      }
+      const total = await getTotalOutstanding(user.id);
+      const lines = customers.map((c, i) => {
+        const due = Number(c.total_due || 0);
+        return `${i + 1}. *${c.name}* — ₹${due.toFixed(0)}${due === 0 ? ' ✅' : ''}`;
+      });
+      await sendMessage(fromNumber,
+        `👥 *Sabka Hisaab*\n\n` +
+        lines.join('\n') +
+        `\n━━━━━━━━━━━━━━\n` +
+        `💰 Total outstanding: *₹${total.toFixed(2)}*\n\n` +
+        `_"poora khata download karo" for Excel/PDF_`
+      );
+      return;
+    }
+
+    // ── Reminder: send WhatsApp to customer ──
+    if (action === 'reminder') {
+      if (customerName) {
+        const customer = await findCustomerByName(user.id, customerName);
+        if (!customer) {
+          await sendMessage(fromNumber, `❌ "${customerName}" naam ka koi customer nahi mila.`);
+          return;
+        }
+        if (!customer.mobile) {
+          await sendMessage(fromNumber, `❌ ${customer.name} ka WhatsApp number save nahi hai.\n_"${customer.name} ka number +91XXXXXXXXXX hai" bhejo pehle_`);
+          return;
+        }
+        const due = Number(customer.total_due || 0);
+        if (due <= 0) {
+          await sendMessage(fromNumber, `✅ ${customer.name} ka koi bakaya nahi hai — reminder ki zaroorat nahi.`);
+          return;
+        }
+        await sendMessage(`whatsapp:${customer.mobile}`,
+          `Namaste *${customer.name}* ji! 🙏\n\n` +
+          `Aapka *₹${due.toFixed(2)}* bakaya hai.\n` +
+          `Kripya jald se jald chukta karein.\n\n` +
+          `_— KharchaAI reminder_`
+        );
+        await sendMessage(fromNumber, `✅ Reminder bhej diya ${customer.name} ko (${customer.mobile})\n💰 Bakaya: ₹${due.toFixed(2)}`);
+      } else {
+        // Send reminder to ALL customers with outstanding balance
+        const customers = await getLedgerSummary(user.id);
+        const withDue = customers.filter(c => Number(c.total_due) > 0 && c.mobile);
+        let sent = 0;
+        for (const c of withDue) {
+          await sendMessage(`whatsapp:${c.mobile}`,
+            `Namaste *${c.name}* ji! 🙏\n\n` +
+            `Aapka *₹${Number(c.total_due).toFixed(2)}* bakaya hai.\n` +
+            `Kripya jald se jald chukta karein.\n\n` +
+            `_— KharchaAI reminder_`
+          );
+          sent++;
+        }
+        const noPhone = customers.filter(c => Number(c.total_due) > 0 && !c.mobile).length;
+        await sendMessage(fromNumber,
+          `✅ *${sent} customers ko reminder bheja!*` +
+          (noPhone > 0 ? `\n⚠️ ${noPhone} customers ka number nahi hai — unhe skip kiya.` : '')
+        );
+      }
+      return;
+    }
+
+    // ── Download: customer PDF/Excel ──
+    if (action === 'download_customer' && customerName) {
+      const customer = await findCustomerByName(user.id, customerName);
+      if (!customer) {
+        await sendMessage(fromNumber, `❌ "${customerName}" naam ka koi customer nahi mila.`);
+        return;
+      }
+      const entries = await getCustomerHistory(customer.id, 500);
+      await sendMessage(fromNumber, `⏳ ${customer.name} ki history generate ho rahi hai...`);
+      const filePath = await exportCustomerExcel(customer, entries);
+      await sendFile(fromNumber, filePath, `${customer.name}_khata.xlsx`);
+      deleteTempFile(filePath);
+      return;
+    }
+
+    // ── Download: full ledger ──
+    if (action === 'download_all') {
+      const customers = await getLedgerSummary(user.id);
+      if (customers.length === 0) {
+        await sendMessage(fromNumber, `📭 Koi customer nahi hai abhi.`);
+        return;
+      }
+      await sendMessage(fromNumber, `⏳ Poora khata generate ho raha hai...`);
+      const filePath = await exportFullLedgerExcel(user.name, customers);
+      await sendFile(fromNumber, filePath, `poora_khata.xlsx`);
+      deleteTempFile(filePath);
+      return;
+    }
+
+    // Fallback
+    await sendMessage(fromNumber, `❓ Khata command samajh nahi aaya. "help" type karo.`);
+
+  } catch (err) {
+    console.error('[Khata] Error:', err.message);
+    await sendMessage(fromNumber, `❌ Kuch gadbad ho gayi. Dobara try karo.`);
+  }
 }
 
 function getWelcomeMessage() {

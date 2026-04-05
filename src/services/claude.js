@@ -23,7 +23,12 @@ If the message contains a SINGLE expense or query, return a JSON object:
   "budget_category": <category id if setting a category budget, "total" for total budget, null if not a budget action>,
   "budget_amount": <number if setting a budget, 0 otherwise>,
   "family_action": <"add_member" | "remove_member" | null>,
-  "family_number": <phone number string if adding/removing member e.g. "+919876543210", null otherwise>
+  "family_number": <phone number string if adding/removing member e.g. "+919876543210", null otherwise>,
+  "khata_action": <"credit" | "payment" | "balance" | "history" | "list" | "reminder" | "download_customer" | "download_all" | null>,
+  "khata_customer_name": <customer name string e.g. "Ashish", null if not a khata action>,
+  "khata_customer_mobile": <mobile number string e.g. "+919876543210" if mentioned, null otherwise>,
+  "khata_amount": <number if credit or payment, 0 otherwise>,
+  "khata_description": <description of goods/reason e.g. "kirana saman", null otherwise>
 }
 
 If the message contains MULTIPLE expenses (e.g. "petrol 500 aur sabzi 300"), return:
@@ -44,6 +49,18 @@ Rules:
 - "add family member +919876543210" → type:single, family_action:"add_member", family_number:"+919876543210"
 - "remove family member +919876543210" → type:single, family_action:"remove_member", family_number:"+919876543210"
 - "unlink +919876543210" → type:single, family_action:"remove_member", family_number:"+919876543210"
+- "500 ka kirana saman Ashish ko diya" → type:single, khata_action:"credit", khata_customer_name:"Ashish", khata_amount:500, khata_description:"kirana saman"
+- "I gave 500 grocery to Ashish" → type:single, khata_action:"credit", khata_customer_name:"Ashish", khata_amount:500, khata_description:"grocery"
+- "Ashish ne 200 diya" → type:single, khata_action:"payment", khata_customer_name:"Ashish", khata_amount:200, khata_description:"payment received"
+- "Ashish ne 200 rupaye waapis kiye" → type:single, khata_action:"payment", khata_customer_name:"Ashish", khata_amount:200
+- "Ashish ka hisaab" or "Ashish ka balance" → type:single, khata_action:"balance", khata_customer_name:"Ashish"
+- "Ashish ki history" or "Ashish ka ledger" → type:single, khata_action:"history", khata_customer_name:"Ashish"
+- "sabka hisaab" or "all customers balance" → type:single, khata_action:"list"
+- "Ashish ko reminder bhejo" → type:single, khata_action:"reminder", khata_customer_name:"Ashish"
+- "sabko reminder bhejo" → type:single, khata_action:"reminder", khata_customer_name:null
+- "Ashish ki history download karo" or "Ashish ka PDF" → type:single, khata_action:"download_customer", khata_customer_name:"Ashish"
+- "poora khata download karo" or "full ledger PDF" → type:single, khata_action:"download_all"
+- "Ashish ka number +919876543210 hai" → type:single, khata_action:"balance", khata_customer_name:"Ashish", khata_customer_mobile:"+919876543210"
 - Convert Hindi amounts: "teen sau" → 300, "paanch hazaar" → 5000, "ek lakh" → 100000
 - All amounts are in Indian Rupees (₹), never dollars
 - Never return anything except valid JSON. No explanations, no markdown.`;

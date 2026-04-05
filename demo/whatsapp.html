@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KharchaAI — WhatsApp Mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #111B21;
+    font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 16px 40px;
+  }
+
+  h1 { color: #E9EDEF; font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { color: #8696A0; font-size: 12px; margin-bottom: 28px; }
+
+  .scenarios-row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .col-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #00A884;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  /* Phone shell */
+  .phone {
+    width: 290px;
+    background: #111B21;
+    border-radius: 32px;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.6), 0 0 0 7px #222;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* WhatsApp header */
+  .wa-header {
+    background: #202C33;
+    padding: 10px 14px 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid #2A3942;
+  }
+  .back-arrow { color: #00A884; font-size: 18px; }
+  .avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: #00A884;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .contact-info { flex: 1; }
+  .contact-name { font-size: 14px; font-weight: 600; color: #E9EDEF; }
+  .contact-status { font-size: 11px; color: #8696A0; }
+  .header-icons { color: #8696A0; font-size: 16px; display: flex; gap: 14px; }
+
+  /* Chat body */
+  .chat-body {
+    background: #0B141A;
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23182229' fill-opacity='0.6'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    flex: 1;
+    padding: 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 400px;
+    max-height: 480px;
+    overflow-y: auto;
+  }
+  .chat-body::-webkit-scrollbar { display: none; }
+
+  /* Date divider */
+  .date-divider {
+    text-align: center;
+    margin: 6px 0;
+  }
+  .date-divider span {
+    background: #182229;
+    color: #8696A0;
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 6px;
+  }
+
+  /* Bubbles */
+  .bubble {
+    max-width: 82%;
+    padding: 7px 10px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.45;
+    position: relative;
+    word-break: break-word;
+  }
+  .bubble .time {
+    font-size: 9px;
+    color: rgba(255,255,255,0.4);
+    position: absolute;
+    bottom: 4px;
+    right: 8px;
+    white-space: nowrap;
+  }
+  .bubble.them {
+    background: #202C33;
+    color: #E9EDEF;
+    align-self: flex-start;
+    border-top-left-radius: 2px;
+  }
+  .bubble.them .time { color: #8696A0; }
+  .bubble.me {
+    background: #005C4B;
+    color: #E9EDEF;
+    align-self: flex-end;
+    border-top-right-radius: 2px;
+  }
+  .bubble.me .time { color: rgba(255,255,255,0.45); }
+  .tick { color: #53BDEB; font-size: 11px; margin-left: 2px; }
+
+  /* Bold/italic inside bubbles */
+  .bubble b { font-weight: 700; }
+  .bubble .green { color: #00A884; font-weight: 700; }
+  .bubble .emoji-big { font-size: 20px; }
+
+  /* Bank SMS bubble — special */
+  .bubble.bank-sms {
+    background: #1A2C35;
+    border-left: 3px solid #00A884;
+    font-size: 11.5px;
+    font-family: 'Courier New', monospace;
+    color: #B0BEC5;
+  }
+  .bank-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: #00A884;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  /* Input bar */
+  .wa-input {
+    background: #202C33;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-top: 1px solid #2A3942;
+  }
+  .input-field {
+    flex: 1;
+    background: #2A3942;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 14px;
+    color: #E9EDEF;
+    font-size: 13px;
+    outline: none;
+  }
+  .send-btn {
+    width: 36px; height: 36px;
+    background: #00A884;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+    font-size: 16px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .mic-icon { color: #8696A0; font-size: 20px; }
+  .attach-icon { color: #8696A0; font-size: 18px; }
+</style>
+</head>
+<body>
+
+<h1>KharchaAI — WhatsApp Conversations</h1>
+<p class="subtitle">Real bot responses for different use cases</p>
+
+<div class="scenarios-row">
+
+  <!-- CHAT 1: Expense Logging -->
+  <div class="col">
+    <div class="col-label">Manual Expense</div>
+    <div class="phone">
+      <div class="wa-header">
+        <div class="back-arrow">←</div>
+        <div class="avatar">💰</div>
+        <div class="contact-info">
+          <div class="contact-name">KharchaAI</div>
+          <div class="contact-status">online</div>
+        </div>
+        <div class="header-icons"><span>📞</span><span>⋮</span></div>
+      </div>
+      <div class="chat-body">
+        <div class="date-divider"><span>Today</span></div>
+
+        <div class="bubble me">chai 30<div class="time">10:02 <span class="tick">✓✓</span></div></div>
+        <div class="bubble them">
+          ✅ <b>Logged!</b><br><br>
+          ☕ <b>Chai</b> — ₹30<br>
+          📂 Food &amp; Drinks<br>
+          📅 Today 10:02 AM<br><br>
+          <span style="color:#8696A0;font-size:11px;">Monthly food: ₹2,340 / ₹8,000 budget</span>
+          <div class="time">10:02</div>
+        </div>
+
+        <div class="bubble me">petrol 500, sabzi 200<div class="time">11:15 <span class="tick">✓✓</span></div></div>
+        <div class="bubble them">
+          ✅ <b>2 expenses logged!</b><br><br>
+          ⛽ <b>Petrol</b> — ₹500<br>
+          📂 Transport<br><br>
+          🥬 <b>Sabzi</b> — ₹200<br>
+          📂 Grocery
+          <div class="time">11:15</div>
+        </div>
+
+        <div class="bubble me">zomato se biryani 650<div class="time">13:30 <span class="tick">✓✓</span></div></div>
+        <div class="bubble them">
+          ✅ <b>Logged!</b><br><br>
+          🍛 <b>Biryani (Zomato)</b> — ₹650<br>
+          📂 Food &amp; Drinks<br>
+          📅 Today 1:30 PM
+          <div class="time">13:30</div>
+        </div>
+      </div>
+      <div class="wa-input">
+        <span class="attach-icon">📎</span>
+        <input class="input-field" placeholder="Message" />
+        <span class="mic-icon">🎤</span>
+        <div class="send-btn">➤</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT 2: Bank SMS auto-detected -->
+  <div class="col">
+    <div class="col-label">Bank SMS Auto-Log</div>
+    <div class="phone">
+      <div class="wa-header">
+        <div class="back-arrow">←</div>
+        <div class="avatar">💰</div>
+        <div class="contact-info">
+          <div class="contact-name">KharchaAI</div>
+          <div class="contact-status">online</div>
+        </div>
+        <div class="header-icons"><span>📞</span><span>⋮</span></div>
+      </div>
+      <div class="chat-body">
+        <div class="date-divider"><span>Today</span></div>
+
+        <div class="bubble them bank-sms">
+          <div class="bank-label">📱 Bank SMS detected</div>
+          INB: Rs.1500.00 debited from A/c XX4821 on 05-Apr-26. Info: UPI/Swiggy. Avl Bal Rs.24,310.12
+          <div class="time" style="color:#546E7A;">10:45</div>
+        </div>
+        <div class="bubble them">
+          🏦 <b>Bank SMS logged!</b><br><br>
+          🍔 <b>Swiggy</b> — ₹1,500<br>
+          📂 Food &amp; Drinks<br>
+          🏦 HDFC Bank XX4821<br>
+          📅 Today 10:45 AM<br><br>
+          <span style="color:#8696A0;font-size:11px;">Remaining balance: ₹24,310</span>
+          <div class="time">10:45</div>
+        </div>
+
+        <div class="bubble them bank-sms" style="margin-top:8px;">
+          <div class="bank-label">📱 Bank SMS detected</div>
+          Dear UPI user, Rs 500.00 debited from A/c XX4821 via UPI. Ref: PAYTM/petrol pump. -HDFC Bank
+          <div class="time" style="color:#546E7A;">14:22</div>
+        </div>
+        <div class="bubble them">
+          🏦 <b>Bank SMS logged!</b><br><br>
+          ⛽ <b>Petrol Pump (Paytm)</b> — ₹500<br>
+          📂 Transport<br>
+          🏦 HDFC Bank XX4821<br>
+          📅 Today 2:22 PM
+          <div class="time">14:22</div>
+        </div>
+      </div>
+      <div class="wa-input">
+        <span class="attach-icon">📎</span>
+        <input class="input-field" placeholder="Message" />
+        <span class="mic-icon">🎤</span>
+        <div class="send-btn">➤</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT 3: Query + Budget -->
+  <div class="col">
+    <div class="col-label">Reports &amp; Budget</div>
+    <div class="phone">
+      <div class="wa-header">
+        <div class="back-arrow">←</div>
+        <div class="avatar">💰</div>
+        <div class="contact-info">
+          <div class="contact-name">KharchaAI</div>
+          <div class="contact-status">online</div>
+        </div>
+        <div class="header-icons"><span>📞</span><span>⋮</span></div>
+      </div>
+      <div class="chat-body">
+        <div class="date-divider"><span>Today</span></div>
+
+        <div class="bubble me">aaj kitna gaya?<div class="time">18:00 <span class="tick">✓✓</span></div></div>
+        <div class="bubble them">
+          📊 <b>Aaj ka kharcha:</b><br><br>
+          ☕ Food &amp; Drinks — ₹2,180<br>
+          ⛽ Transport — ₹500<br>
+          🥬 Grocery — ₹200<br>
+          ─────────────────<br>
+          <b>Total: ₹2,880</b><br><br>
+          <span style="color:#8696A0;font-size:11px;">5 transactions today</span>
+          <div class="time">18:00</div>
+        </div>
+
+        <div class="bubble me">grocery budget 8000<div class="time">18:02 <span class="tick">✓✓</span></div></div>
+        <div class="bubble them">
+          🎯 <b>Budget set!</b><br><br>
+          🥬 Grocery budget: <b>₹8,000/month</b><br><br>
+          Abhi tak kharch: ₹3,400<br>
+          Bacha: ₹4,600 (58%)<br><br>
+          <span style="color:#8696A0;font-size:11px;">80% hone pe alert milega 🔔</span>
+          <div class="time">18:02</div>
+        </div>
+
+        <div class="bubble me">is hafte ka summary<div class="time">18:05 <span class="tick">✓✓</span></div></div>
+        <div class="bubble them">
+          📅 <b>This Week (Apr 1–5):</b><br><br>
+          🍔 Food — ₹4,320 &nbsp;████░░<br>
+          ⛽ Transport — ₹1,200 &nbsp;██░░░<br>
+          🛒 Grocery — ₹3,400 &nbsp;███░░<br>
+          💊 Health — ₹800 &nbsp;█░░░░<br>
+          ─────────────────<br>
+          <b>Total: ₹9,720</b><br><br>
+          vs last week: ₹8,100 📈 +20%
+          <div class="time">18:05</div>
+        </div>
+      </div>
+      <div class="wa-input">
+        <span class="attach-icon">📎</span>
+        <input class="input-field" placeholder="Message" />
+        <span class="mic-icon">🎤</span>
+        <div class="send-btn">➤</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT 4: OTP + Voice + Help -->
+  <div class="col">
+    <div class="col-label">OTP + Voice + Help</div>
+    <div class="phone">
+      <div class="wa-header">
+        <div class="back-arrow">←</div>
+        <div class="avatar">💰</div>
+        <div class="contact-info">
+          <div class="contact-name">KharchaAI</div>
+          <div class="contact-status">online</div>
+        </div>
+        <div class="header-icons"><span>📞</span><span>⋮</span></div>
+      </div>
+      <div class="chat-body">
+        <div class="date-divider"><span>Today</span></div>
+
+        <!-- OTP flow -->
+        <div class="bubble them">
+          🔐 <b>KharchaAI Verification</b><br><br>
+          Aapka OTP: <b style="font-size:18px;letter-spacing:3px;">482193</b><br><br>
+          Valid for 10 minutes.<br>
+          <span style="color:#FF5252;font-size:11px;">Kisi ke saath share mat karo.</span>
+          <div class="time">09:30</div>
+        </div>
+        <div class="bubble them" style="margin-top:2px;">
+          🎉 <b>KharchaAI pe swagat hai!</b><br><br>
+          Ab:<br>
+          • "chai 30" likhke kharcha daalo<br>
+          • Bank SMS automatically track hoga<br>
+          • "help" likhne pe poora menu milega 😊
+          <div class="time">09:31</div>
+        </div>
+
+        <!-- Voice message -->
+        <div class="bubble me" style="display:flex;align-items:center;gap:8px;padding-bottom:20px;">
+          <span style="font-size:18px;">🎤</span>
+          <div style="flex:1;">
+            <div style="background:rgba(255,255,255,0.15);height:3px;border-radius:2px;margin-bottom:4px;">
+              <div style="background:#fff;width:60%;height:3px;border-radius:2px;"></div>
+            </div>
+            <span style="font-size:10px;color:rgba(255,255,255,0.6);">0:04</span>
+          </div>
+          <div class="time">11:20 <span class="tick">✓✓</span></div>
+        </div>
+        <div class="bubble them">
+          🎤 Suna: <i>"doctor ke paas gaya, fees 800 di"</i><br><br>
+          ✅ <b>Logged!</b><br>
+          💊 <b>Doctor Fees</b> — ₹800<br>
+          📂 Health
+          <div class="time">11:20</div>
+        </div>
+
+        <!-- Help -->
+        <div class="bubble me">help<div class="time">14:00 <span class="tick">✓✓</span></div></div>
+        <div class="bubble them">
+          👋 <b>KharchaAI mein aapka swagat!</b><br><br>
+          📝 <b>Kharcha log karo:</b><br>
+          &nbsp;chai 30 • petrol 500<br><br>
+          📊 <b>Reports:</b><br>
+          &nbsp;aaj kitna gaya?<br>
+          &nbsp;monthly report<br><br>
+          🎯 <b>Budget:</b><br>
+          &nbsp;grocery budget 8000<br><br>
+          📱 <b>App install:</b><br>
+          &nbsp;app install karo
+          <div class="time">14:00</div>
+        </div>
+      </div>
+      <div class="wa-input">
+        <span class="attach-icon">📎</span>
+        <input class="input-field" placeholder="Message" />
+        <span class="mic-icon">🎤</span>
+        <div class="send-btn">➤</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
