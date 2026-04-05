@@ -29,6 +29,10 @@ If the message contains a SINGLE expense or query, return a JSON object:
   "income_category": <one of: salary, freelance, business, rent, investment, transfer, refund, other — null if not income>,
   "income_description": <description e.g. "April salary", "Freelance project", null otherwise>,
   "income_query": <boolean, true if asking about income or savings>,
+  "report_schedule_set": <boolean, true if user is setting weekly report day/time>,
+  "report_day": <day name string e.g. "monday", "sunday", "somvar" — null if not setting>,
+  "report_hour": <number 0-23 e.g. 8 for 8am, 20 for 8pm — null if not setting>,
+  "report_disable": <boolean, true if user wants to disable weekly report>,
   "khata_action": <"credit" | "payment" | "balance" | "history" | "list" | "reminder" | "download_customer" | "download_all" | null>,
   "khata_customer_name": <customer name string e.g. "Ashish", null if not a khata action>,
   "khata_customer_mobile": <mobile number string e.g. "+919876543210" if mentioned, null otherwise>,
@@ -51,6 +55,10 @@ Rules:
 - "aaj kitna gaya?" → type:single, is_query:true, query_type:"daily"
 - "grocery pe kitna?" → type:single, is_query:true, query_type:"category", query_category:"grocery"
 - "grocery budget 8000" → type:single, budget_set:true, budget_category:"grocery", budget_amount:8000
+- "weekly report Monday 8 am set karo" → type:single, report_schedule_set:true, report_day:"monday", report_hour:8
+- "mujhe Sunday 9 baje weekly report chahiye" → type:single, report_schedule_set:true, report_day:"sunday", report_hour:9
+- "weekly report band karo" → type:single, report_disable:true
+- "weekly reminder Tuesday evening 6 baje" → type:single, report_schedule_set:true, report_day:"tuesday", report_hour:18
 - "aaj salary aayi 45000" → type:single, income_log:true, income_amount:45000, income_category:"salary", income_description:"April salary"
 - "freelance ka payment mila 8000" → type:single, income_log:true, income_amount:8000, income_category:"freelance", income_description:"Freelance payment"
 - "rent mila 15000" → type:single, income_log:true, income_amount:15000, income_category:"rent", income_description:"Rent received"

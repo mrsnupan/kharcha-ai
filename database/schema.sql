@@ -22,6 +22,10 @@ CREATE TABLE IF NOT EXISTS users (
   token_expires_at  TIMESTAMPTZ,           -- token expiry (30 days from login)
   consent_given_at  TIMESTAMPTZ,           -- DPDP Act: when user gave consent
   data_deletion_requested_at TIMESTAMPTZ, -- DPDP Act: erasure request timestamp
+  -- Weekly report schedule preference
+  report_day        INTEGER NOT NULL DEFAULT 0,    -- 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat
+  report_hour       INTEGER NOT NULL DEFAULT 8,    -- 0–23 (IST)
+  report_enabled    BOOLEAN NOT NULL DEFAULT true, -- false = opted out
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

@@ -17,6 +17,10 @@ const {
   logIncome, getIncomeVsExpense, formatIncomeVsExpense
 } = require('../models/income');
 const {
+  setReportSchedule, disableReport,
+  parseDayName, parseHour, DAY_NAMES
+} = require('../services/weeklyReport');
+const {
   exportCustomerExcel, exportFullLedgerExcel,
   exportCustomerPDF, exportFullLedgerPDF, deleteTempFile
 } = require('../services/export');
@@ -116,6 +120,43 @@ async function handleTextMessage(user, fromNumber, text) {
     } catch (e) {
       await sendMessage(fromNumber, `❌ ${e.message}`);
     }
+    return;
+  }
+
+  // ── Weekly report schedule ──
+  if (parsed.report_disable) {
+    await disableReport(user.id);
+    await sendMessage(fromNumber,
+      `🔕 *Weekly report band kar diya.*\n\n` +
+      `Dobara shuru karne ke liye:\n` +
+      `_"weekly report Monday 8 am set karo"_`
+    );
+    return;
+  }
+
+  if (parsed.report_schedule_set) {
+    const rawText = messageBody || '';
+    // Try Claude's parsed values first, fallback to regex parsing
+    const day  = parsed.report_day  != null ? parseDayName(parsed.report_day) : parseDayName(rawText);
+    const hour = parsed.report_hour != null ? Number(parsed.report_hour)       : parseHour(rawText);
+
+    const finalDay  = day  ?? 0; // default Sunday
+    const finalHour = hour ?? 8; // default 8am
+
+    await setReportSchedule(user.id, finalDay, finalHour, true);
+
+    const dayName  = DAY_NAMES[finalDay];
+    const hourStr  = finalHour < 12
+      ? `${finalHour === 0 ? 12 : finalHour}:00 AM`
+      : `${finalHour === 12 ? 12 : finalHour - 12}:00 PM`;
+
+    await sendMessage(fromNumber,
+      `✅ *Weekly report schedule set!*\n\n` +
+      `📅 Din: *${dayName}*\n` +
+      `🕐 Time: *${hourStr} IST*\n\n` +
+      `Har ${dayName} ko ${hourStr} pe aapko weekly summary milegi automatically.\n\n` +
+      `_"weekly report band karo" — disable karne ke liye_`
+    );
     return;
   }
 
@@ -296,6 +337,11 @@ function getHelpMessage() {
 • "freelance ka 8000 mila"
 • "rent mila 15000"
 • "income vs expense dikhao" / "savings kitna hua"
+
+📆 *Weekly Report:*
+• Default: Sunday 8 AM automatic
+• "weekly report Monday 9 am set karo"
+• "weekly report band karo"
 
 📒 *Khata / Udhaar Tracker:*
 _Kirana shop, friends, family — sab ke liye!_

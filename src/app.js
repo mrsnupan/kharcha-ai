@@ -129,6 +129,10 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`KharchaAI running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+
+  // Start weekly report cron (checks every hour, sends to users due at that time)
+  const { startWeeklyReportCron } = require('./services/weeklyReport');
+  startWeeklyReportCron();
 });
 
 module.exports = app;
