@@ -133,6 +133,63 @@ async function getCategoryMonthExpenses(userId, category) {
   });
 }
 
+/**
+ * Get the most recent expense for a user
+ */
+async function getLastExpense(userId) {
+  const { data, error } = await supabase
+    .from('expenses')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+/**
+ * Delete a specific expense by ID (must belong to user)
+ */
+async function deleteExpense(userId, expenseId) {
+  const { error } = await supabase
+    .from('expenses')
+    .delete()
+    .eq('id', expenseId)
+    .eq('user_id', userId); // safety: only delete own expenses
+  if (error) throw error;
+}
+
+/**
+ * Delete the most recent expense for a user.
+ * Returns the deleted expense or null if none found.
+ */
+async function deleteLastExpense(userId) {
+  const last = await getLastExpense(userId);
+  if (!last) return null;
+  await deleteExpense(userId, last.id);
+  return last;
+}
+
+/**
+ * Delete the most recent expense matching a given amount.
+ * Returns the deleted expense or null if not found.
+ */
+async function deleteExpenseByAmount(userId, amount) {
+  const { data, error } = await supabase
+    .from('expenses')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('amount', Number(amount))
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  await deleteExpense(userId, data.id);
+  return data;
+}
+
 module.exports = {
   createExpense,
   getExpenses,
@@ -140,5 +197,9 @@ module.exports = {
   getWeekExpenses,
   getMonthExpenses,
   getLastMonthExpenses,
-  getCategoryMonthExpenses
+  getCategoryMonthExpenses,
+  getLastExpense,
+  deleteExpense,
+  deleteLastExpense,
+  deleteExpenseByAmount
 };

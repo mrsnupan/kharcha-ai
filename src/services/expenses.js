@@ -45,7 +45,7 @@ async function checkBudgetAlert(userId, category, toNumber) {
     const pct = (spent / catBudget.monthly_limit) * 100;
     const cat = getCategoryById(category);
 
-    if (pct >= 100 || (pct >= 80 && spent - Number(catBudget.monthly_limit) < 0)) {
+    if (pct >= 100 || (pct >= 90 && spent < Number(catBudget.monthly_limit))) {
       const msg = formatBudgetAlert(cat.label, cat.emoji, spent, catBudget.monthly_limit, pct);
       if (toNumber) {
         await sendMessage(toNumber, msg).catch(e => console.error('[Alert]', e.message));
@@ -61,7 +61,7 @@ async function checkBudgetAlert(userId, category, toNumber) {
     const spent = allExpenses.reduce((s, e) => s + Number(e.amount), 0);
     const pct = (spent / totalBudget.monthly_limit) * 100;
 
-    if (pct >= 100 || (pct >= 80 && spent < totalBudget.monthly_limit)) {
+    if (pct >= 100 || (pct >= 90 && spent < totalBudget.monthly_limit)) {
       const msg = formatBudgetAlert('Total', '💰', spent, totalBudget.monthly_limit, pct);
       if (toNumber) {
         await sendMessage(toNumber, msg).catch(e => console.error('[Alert]', e.message));

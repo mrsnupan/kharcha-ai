@@ -61,7 +61,11 @@ If the message contains a SINGLE expense or query, return a JSON object:
   "gst_base_amount": <base amount before GST, 0 if not a GST action>,
   "gst_rate": <5 | 12 | 18 | 28 | null>,
   "gst_description": <description e.g. "office furniture", null otherwise>,
-  "gst_vendor_gstin": <GSTIN string if mentioned, null otherwise>
+  "gst_vendor_gstin": <GSTIN string if mentioned, null otherwise>,
+  "expense_delete": <boolean, true if user wants to delete/undo an expense entry>,
+  "delete_last": <boolean, true if user says "last entry", "last wali", "abhi jo daala">,
+  "delete_amount": <number if user mentions a specific amount to delete, 0 otherwise>,
+  "user_name": <string if user is introducing themselves e.g. "mera naam Rahul hai" → "Rahul", null otherwise>
 }
 
 If the message contains MULTIPLE expenses (e.g. "petrol 500 aur sabzi 300"), return:
@@ -130,6 +134,14 @@ Rules:
 - "movie 600, 3 log" → type:single, split_total:600, split_count:3, split_description:"movie ticket"
 - "1500 ki party, hum 5 dost the" → type:single, split_total:1500, split_count:5, split_description:"party"
 - "petrol 500 split karo 2 mein" → type:single, split_total:500, split_count:2, split_description:"petrol"
+- "mera naam Rahul hai" → user_name:"Rahul"
+- "I am Priya" or "main Priya hoon" → user_name:"Priya"
+- "last entry delete karo" → expense_delete:true, delete_last:true
+- "last wali entry galat thi" → expense_delete:true, delete_last:true
+- "abhi jo daala woh hata do" → expense_delete:true, delete_last:true
+- "500 wali entry delete karo" → expense_delete:true, delete_amount:500
+- "chai 30 galat tha, delete karo" → expense_delete:true, delete_amount:30
+- "undo" or "undo karo" → expense_delete:true, delete_last:true
 - "LIC ka premium 15000 bhara" → tax_action:"log_deduction", tax_section:"80C", tax_sub_category:"lic", tax_amount:15000, tax_description:"LIC Premium"
 - "PPF mein 50000 daala" → tax_action:"log_deduction", tax_section:"80C", tax_sub_category:"ppf", tax_amount:50000, tax_description:"PPF Deposit"
 - "ELSS mein 25000 invest kiya" → tax_action:"log_deduction", tax_section:"80C", tax_sub_category:"elss", tax_amount:25000, tax_description:"ELSS Investment"

@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 
-const { findOrCreateUser, addFamilyMember, removeFamilyMember } = require('../models/user');
+const { findOrCreateUser, addFamilyMember, removeFamilyMember, updateUserName } = require('../models/user');
 const { understandMessage } = require('../services/claude');
 const { transcribeVoiceMessage } = require('../services/whisper');
 const { logExpense, handleQuery, handleSetBudget } = require('../services/expenses');
+const { deleteLastExpense, deleteExpenseByAmount, getLastExpense } = require('../models/expense');
 const { sendMessage, sendFile } = require('../services/whatsapp');
 const { formatVoiceConfirmation } = require('../utils/formatter');
 const twilioValidate = require('../middleware/twilioValidate');
@@ -113,9 +114,37 @@ router.post('/', async (req, res) => {
 // Text message handler
 // ──────────────────────────────────────────────────────────
 async function handleTextMessage(user, fromNumber, text) {
-  // Quick commands (no Claude needed)
   const lower = text.toLowerCase().trim();
 
+  // ── Name collection — if user hasn't shared name yet ──
+  if (!user.name) {
+    // Check if this looks like a name (short, no digits, not a command)
+    const commandWords = ['help', 'hi', 'hello', 'app', 'report', 'budget', 'undo', 'delete'];
+    const looksLikeName = text.length >= 2 && text.length <= 25
+      && !/\d/.test(text)
+      && !commandWords.includes(lower)
+      && !/[₹%@]/.test(text);
+
+    if (looksLikeName && !text.includes(' ') || /^(mera naam|my name is|main hoon|i am|i'm)\s+\w+/i.test(text)) {
+      // Extract just the name part if they said "mera naam Rahul hai"
+      const nameMatch = text.match(/(?:mera naam|my name is|main hoon|i am|i'm)\s+([a-zA-Z]+)/i);
+      const name      = nameMatch ? nameMatch[1] : text.split(' ')[0];
+      const cleanName = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+
+      await updateUserName(user.id, cleanName);
+      await sendMessage(fromNumber,
+        `Shukriya *${cleanName}*! 😊 KharchaAI mein aapka swagat hai!\n\n` +
+        `Ab shuru karte hain:\n` +
+        `• "chai 30" — kharcha log karo\n` +
+        `• "aaj kitna gaya?" — report dekho\n` +
+        `• "help" — poora menu\n\n` +
+        `_Aapka naam ab reports mein use hoga!_ 🎉`
+      );
+      return;
+    }
+  }
+
+  // Quick commands (no Claude needed)
   if (lower === 'help' || lower === 'hi' || lower === 'hello' || lower === 'helo') {
     await sendMessage(fromNumber, getHelpMessage());
     return;
@@ -129,6 +158,51 @@ async function handleTextMessage(user, fromNumber, text) {
   // Ask Claude to understand the message
   const parsed = await understandMessage(text);
   console.log('[Claude parsed]', JSON.stringify(parsed));
+
+  // ── Name update via chat ──
+  if (parsed.user_name && parsed.user_name.length >= 2) {
+    const cleanName = parsed.user_name.charAt(0).toUpperCase() + parsed.user_name.slice(1).toLowerCase();
+    await updateUserName(user.id, cleanName);
+    await sendMessage(fromNumber,
+      `✅ Naam save ho gaya: *${cleanName}* 😊\n_Ab aapke weekly reports personalized honge!_`
+    );
+    return;
+  }
+
+  // ── Expense delete / undo ──
+  if (parsed.expense_delete) {
+    try {
+      let deleted = null;
+
+      if (parsed.delete_last) {
+        deleted = await deleteLastExpense(user.id);
+      } else if (parsed.delete_amount > 0) {
+        deleted = await deleteExpenseByAmount(user.id, parsed.delete_amount);
+      }
+
+      if (!deleted) {
+        await sendMessage(fromNumber,
+          `❌ Koi expense nahi mila delete karne ke liye.\n_"last entry delete karo" ya "500 wali delete karo"_`
+        );
+        return;
+      }
+
+      const d = new Date(deleted.created_at);
+      const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+
+      await sendMessage(fromNumber,
+        `🗑️ *Entry delete ho gayi!*\n\n` +
+        `❌ ~~${deleted.description || deleted.category} — ₹${fmtAmt(deleted.amount)}~~\n` +
+        `📅 ${dateStr} at ${timeStr}\n\n` +
+        `_Galat tha? Dobara type karo aur log ho jaayega._`
+      );
+    } catch (err) {
+      console.error('[Delete] Error:', err.message);
+      await sendMessage(fromNumber, `❌ Delete nahi hua. Dobara try karo.`);
+    }
+    return;
+  }
 
   // ── Family action ──
   if (parsed.family_action === 'add_member' && parsed.family_number) {
@@ -1328,7 +1402,9 @@ function getWelcomeMessage() {
     `• "aaj kitna gaya?" — report dekho\n\n` +
     `📱 *Bank SMS automatic track karne ke liye:*\n` +
     `App install karo: ${apkUrl}\n\n` +
-    `_"help" likhoge toh poora menu milega_ 😊`
+    `_"help" likhoge toh poora menu milega_ 😊\n\n` +
+    `👤 *Pehle apna naam batao!*\n` +
+    `_Sirf apna naam type karo — e.g. "Rahul"_`
   );
 }
 
