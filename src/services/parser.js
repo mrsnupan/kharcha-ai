@@ -231,4 +231,91 @@ function isIncomeSMS(smsText, amount) {
   return false;
 }
 
-module.exports = { parseSMS, isBankSMS, isIncomeSMS };
+// ──────────────────────────────────────────────────────────
+// RECHARGE / BILL SMS DETECTION
+// ──────────────────────────────────────────────────────────
+
+const RECHARGE_PROVIDERS = [
+  { pattern: /\bjio\b|reliance\s*jio/i,           name: 'Jio' },
+  { pattern: /\bairtel\b|bharti\s*airtel/i,        name: 'Airtel' },
+  { pattern: /\bvi\b|vodafone|idea\s*cellular/i,   name: 'Vi (Vodafone Idea)' },
+  { pattern: /\bbsnl\b/i,                          name: 'BSNL' },
+  { pattern: /\bmtnl\b/i,                          name: 'MTNL' }
+];
+
+const RECHARGE_KEYWORDS = [
+  'recharge', 'validity', 'data pack', 'plan activated', 'prepaid',
+  'talktime', 'unlimited calls', 'gb data', 'validity extended',
+  'your plan', 'plan is active', 'pack activated', 'your pack',
+  'your recharge', 'successfully recharged'
+];
+
+// Patterns to extract expiry/next-due date from recharge SMS
+const VALIDITY_DATE_PATTERNS = [
+  /valid(?:ity)?\s+(?:till|upto|until|through)\s*[:\-]?\s*(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i,
+  /valid(?:ity)?\s+(?:till|upto|until|through)\s*[:\-]?\s*(\d{1,2}\s+\w{3}\s+\d{4})/i,
+  /expir(?:y|es?)\s*(?:on|date)?\s*[:\-]?\s*(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i,
+  /expir(?:y|es?)\s*(?:on|date)?\s*[:\-]?\s*(\d{1,2}\s+\w{3}\s+\d{4})/i,
+  /(?:next\s+)?(?:renewal|recharge)\s+(?:due\s+)?(?:on|by|before)?\s*[:\-]?\s*(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i,
+  /(?:date\s+of\s+)?expiry\s*[:\-]\s*(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i
+];
+
+/**
+ * Returns true if this SMS looks like a mobile recharge/telecom notification.
+ */
+function isRechargeSMS(smsText) {
+  if (!smsText) return false;
+  const lower = smsText.toLowerCase();
+  return RECHARGE_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+/**
+ * Parse a recharge SMS — extract provider, amount, next due date.
+ * Returns { provider, amount, nextDueDate } or null.
+ */
+function parseRechargeSMS(smsText) {
+  if (!isRechargeSMS(smsText)) return null;
+
+  // Provider
+  let provider = 'Mobile';
+  for (const { pattern, name } of RECHARGE_PROVIDERS) {
+    if (pattern.test(smsText)) { provider = name; break; }
+  }
+
+  // Amount — reuse existing AMOUNT_PATTERNS
+  let amount = null;
+  for (const pattern of AMOUNT_PATTERNS) {
+    const match = smsText.match(pattern);
+    if (match) {
+      amount = parseFloat(match[1].replace(/,/g, ''));
+      if (!isNaN(amount) && amount > 0) break;
+    }
+  }
+
+  // "valid for X days" → calculate expiry from today
+  let nextDueDate = null;
+  const daysMatch = smsText.match(/valid\s+for\s+(\d+)\s+days?/i);
+  if (daysMatch) {
+    const due = new Date();
+    due.setDate(due.getDate() + parseInt(daysMatch[1]));
+    nextDueDate = due.toISOString().split('T')[0];
+  }
+
+  // Try explicit date patterns
+  if (!nextDueDate) {
+    for (const pat of VALIDITY_DATE_PATTERNS) {
+      const m = smsText.match(pat);
+      if (m) {
+        const parsed = new Date(m[1].replace(/-/g, '/'));
+        if (!isNaN(parsed)) {
+          nextDueDate = parsed.toISOString().split('T')[0];
+          break;
+        }
+      }
+    }
+  }
+
+  return { provider, amount, nextDueDate };
+}
+
+module.exports = { parseSMS, isBankSMS, isIncomeSMS, isRechargeSMS, parseRechargeSMS };

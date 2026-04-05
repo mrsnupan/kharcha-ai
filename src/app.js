@@ -133,6 +133,10 @@ app.listen(PORT, () => {
   // Start weekly report cron (checks every hour, sends to users due at that time)
   const { startWeeklyReportCron } = require('./services/weeklyReport');
   startWeeklyReportCron();
+
+  // Start daily reminder cron (EMI, recharge, bill alerts — 8 AM IST)
+  const { startReminderCron } = require('./services/reminderCron');
+  startReminderCron();
 });
 
 module.exports = app;

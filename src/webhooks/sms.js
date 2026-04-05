@@ -1,13 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../models/db');
-const { parseSMS, isBankSMS, isIncomeSMS } = require('../services/parser');
+const { parseSMS, isBankSMS, isIncomeSMS, isRechargeSMS, parseRechargeSMS } = require('../services/parser');
 const { detectCategory } = require('../utils/categories');
 const { logExpense } = require('../services/expenses');
 const { logIncome, detectIncomeCategory } = require('../models/income');
 const { sendMessage } = require('../services/whatsapp');
 const { getUserByToken } = require('../routes/auth');
 const { maskPhone, maskAccount } = require('../middleware/validate');
+const { detectEmiFromSMS, inferEmiName, addEmi, scheduleEmiReminder } = require('../models/emi');
+const { addRechargeReminder } = require('../services/reminderCron');
 
 /**
  * POST /webhook/sms
@@ -62,6 +64,33 @@ router.post('/', async (req, res) => {
     .single()
     .catch(() => ({ data: null }));
 
+  // ── Check for telecom/recharge SMS (Jio, Airtel, Vi, BSNL) ──
+  // These come from telecom senders, not banks — handle separately
+  if (isRechargeSMS(rawSMS)) {
+    const recharge = parseRechargeSMS(rawSMS);
+    if (recharge && recharge.nextDueDate) {
+      try {
+        await addRechargeReminder(user.id, recharge.provider, recharge.amount, recharge.nextDueDate);
+        const dueDateLabel = new Date(recharge.nextDueDate).toLocaleDateString('en-IN', {
+          day: '2-digit', month: 'short', year: 'numeric'
+        });
+        await sendMessage(user.whatsapp_number,
+          `📱 *${recharge.provider} Recharge detected!*\n\n` +
+          (recharge.amount ? `💰 Pack: ₹${recharge.amount}\n` : '') +
+          `📅 Validity: *${dueDateLabel}*\n` +
+          `🔔 Aapko *2 din pehle* reminder milega!\n\n` +
+          `_"reminders dikhao" — upcoming reminders dekhne ke liye_`
+        );
+        if (smsLog) await supabase.from('sms_logs').update({ status: 'logged', parsed_data: recharge }).eq('id', smsLog.id).catch(() => {});
+        console.log(`[SMS webhook] Recharge reminder set: ${recharge.provider}, due ${recharge.nextDueDate}`);
+      } catch (err) {
+        console.error('[SMS webhook] Recharge reminder failed:', err.message);
+      }
+    }
+    // If it's also a bank debit for recharge, fall through to log as expense
+    if (!isBankSMS(rawSMS)) return;
+  }
+
   // Check if this looks like a bank SMS
   if (!isBankSMS(rawSMS)) {
     console.log('[SMS webhook] Not a bank SMS, ignoring');
@@ -107,6 +136,27 @@ router.post('/', async (req, res) => {
       if (smsLog) await supabase.from('sms_logs').update({ status: 'failed', parsed_data: { error: err.message } }).eq('id', smsLog.id).catch(() => {});
     }
     return;
+  }
+
+  // ── DEBIT: check for recharge SMS first (non-bank, telecom) ──
+  // Recharge SMS comes from Jio/Airtel/Vi — detected before bank parse
+  // Note: isRechargeSMS is checked on raw SMS regardless of parseSMS result
+
+  // ── DEBIT: check for EMI deduction ──
+  if (parsed.transactionType === 'debit' && detectEmiFromSMS(rawSMS)) {
+    const emiName = inferEmiName(rawSMS);
+    // Check if this EMI is already tracked; if not, auto-create it
+    const today = new Date();
+    const dueDay = today.getDate();
+    try {
+      const newEmi = await addEmi(user.id, emiName, parsed.amount, dueDay);
+      await scheduleEmiReminder(user.id, newEmi);
+      console.log(`[SMS webhook] EMI auto-detected: ${emiName} ₹${parsed.amount}`);
+      // Also log the deduction as an expense (category: emi/finance)
+    } catch (emiErr) {
+      console.error('[SMS webhook] EMI schedule failed:', emiErr.message);
+      // Continue to log as expense even if EMI tracking fails
+    }
   }
 
   // ── DEBIT: log as expense ──

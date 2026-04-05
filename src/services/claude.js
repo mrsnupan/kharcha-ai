@@ -37,7 +37,19 @@ If the message contains a SINGLE expense or query, return a JSON object:
   "khata_customer_name": <customer name string e.g. "Ashish", null if not a khata action>,
   "khata_customer_mobile": <mobile number string e.g. "+919876543210" if mentioned, null otherwise>,
   "khata_amount": <number if credit or payment, 0 otherwise>,
-  "khata_description": <description of goods/reason e.g. "kirana saman", null otherwise>
+  "khata_description": <description of goods/reason e.g. "kirana saman", null otherwise>,
+  "emi_action": <"add" | "list" | "done" | null>,
+  "emi_name": <EMI name string e.g. "Home Loan EMI", "Car Loan EMI", null otherwise>,
+  "emi_amount": <number if adding EMI, 0 otherwise>,
+  "emi_due_day": <day of month 1-31 e.g. 5 for "5th of every month", null if not adding>,
+  "savings_action": <"add_goal" | "add_money" | "list" | "check" | null>,
+  "savings_goal_name": <goal name string e.g. "Goa Trip", "New Phone", null otherwise>,
+  "savings_target_amount": <target amount if creating new goal, 0 otherwise>,
+  "savings_add_amount": <amount being added to goal if savings_action="add_money", 0 otherwise>,
+  "savings_deadline": <deadline string e.g. "31-12-2026", "3 mahine mein", null otherwise>,
+  "split_total": <total amount to split e.g. 1200, 0 if not a split>,
+  "split_count": <number of people to split between e.g. 4, 0 if not a split>,
+  "split_description": <what it's for e.g. "dinner", "movie", null otherwise>
 }
 
 If the message contains MULTIPLE expenses (e.g. "petrol 500 aur sabzi 300"), return:
@@ -90,6 +102,22 @@ Rules:
 - "Ashish ki history download karo" or "Ashish ka PDF" → type:single, khata_action:"download_customer", khata_customer_name:"Ashish"
 - "poora khata download karo" or "full ledger PDF" or "sab ki list download" → type:single, khata_action:"download_all"
 - "Ashish ka number +919876543210 hai" → type:single, khata_action:"balance", khata_customer_name:"Ashish", khata_customer_mobile:"+919876543210"
+- "Home Loan EMI 12000 date 5" → type:single, emi_action:"add", emi_name:"Home Loan EMI", emi_amount:12000, emi_due_day:5
+- "Car loan ki EMI 8500 har 15 tarikh ko" → type:single, emi_action:"add", emi_name:"Car Loan EMI", emi_amount:8500, emi_due_day:15
+- "personal loan 5000 ki EMI 10th ko" → type:single, emi_action:"add", emi_name:"Personal Loan EMI", emi_amount:5000, emi_due_day:10
+- "meri EMI list dikhao" → type:single, emi_action:"list"
+- "Home Loan EMI pay ho gayi" → type:single, emi_action:"done", emi_name:"Home Loan EMI"
+- "Goa trip ke liye 20000 bachana hai" → type:single, savings_action:"add_goal", savings_goal_name:"Goa Trip", savings_target_amount:20000
+- "naya phone ke liye 15000 save karna hai 3 mahine mein" → type:single, savings_action:"add_goal", savings_goal_name:"New Phone", savings_target_amount:15000, savings_deadline:"3 mahine mein"
+- "Wedding fund 50000 December tak" → type:single, savings_action:"add_goal", savings_goal_name:"Wedding Fund", savings_target_amount:50000, savings_deadline:"December"
+- "Goal mein 5000 daalo" or "savings mein 5000" → type:single, savings_action:"add_money", savings_add_amount:5000
+- "Goa trip goal mein 2000 daalo" → type:single, savings_action:"add_money", savings_goal_name:"Goa Trip", savings_add_amount:2000
+- "meri goals dikhao" or "savings goals kya hain" → type:single, savings_action:"list"
+- "Goa trip kitna hua?" → type:single, savings_action:"check", savings_goal_name:"Goa Trip"
+- "dinner 1200, hum 4 the" → type:single, split_total:1200, split_count:4, split_description:"dinner"
+- "movie 600, 3 log" → type:single, split_total:600, split_count:3, split_description:"movie ticket"
+- "1500 ki party, hum 5 dost the" → type:single, split_total:1500, split_count:5, split_description:"party"
+- "petrol 500 split karo 2 mein" → type:single, split_total:500, split_count:2, split_description:"petrol"
 - Convert Hindi amounts: "teen sau" → 300, "paanch hazaar" → 5000, "ek lakh" → 100000
 - All amounts are in Indian Rupees (₹), never dollars
 - Never return anything except valid JSON. No explanations, no markdown.`;

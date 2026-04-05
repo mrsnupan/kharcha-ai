@@ -24,6 +24,17 @@ const {
   exportCustomerExcel, exportFullLedgerExcel,
   exportCustomerPDF, exportFullLedgerPDF, deleteTempFile
 } = require('../services/export');
+const {
+  addEmi, listEmis, findEmiByName, updateEmiStatus,
+  scheduleEmiReminder, scheduleAllEmiReminders,
+  getNextDueDate, formatEmiList
+} = require('../models/emi');
+const {
+  addGoal, listGoals, findGoalByName, addToGoal,
+  formatGoalProgress, formatGoalsList
+} = require('../models/savings');
+const { listReminders } = require('../services/reminderCron');
+const { extractReceiptData } = require('../services/vision');
 
 const MAX_MESSAGE_LENGTH = 1000; // prevent prompt injection via huge messages
 
@@ -57,6 +68,12 @@ router.post('/', async (req, res) => {
     // ── New user — send welcome + app install link first ──
     if (user._isNew) {
       await sendMessage(fromNumber, getWelcomeMessage());
+      return;
+    }
+
+    // ── Receipt / bill photo ──
+    if (numMedia > 0 && mediaContentType.startsWith('image/')) {
+      await handleReceiptPhoto(user, fromNumber, mediaUrl);
       return;
     }
 
@@ -135,7 +152,7 @@ async function handleTextMessage(user, fromNumber, text) {
   }
 
   if (parsed.report_schedule_set) {
-    const rawText = messageBody || '';
+    const rawText = text || '';
     // Try Claude's parsed values first, fallback to regex parsing
     const day  = parsed.report_day  != null ? parseDayName(parsed.report_day) : parseDayName(rawText);
     const hour = parsed.report_hour != null ? Number(parsed.report_hour)       : parseHour(rawText);
@@ -189,6 +206,40 @@ async function handleTextMessage(user, fromNumber, text) {
   // ── Khata (Kirana ledger) actions ──
   if (parsed.khata_action) {
     await handleKhataAction(user, fromNumber, parsed);
+    return;
+  }
+
+  // ── EMI actions ──
+  if (parsed.emi_action) {
+    await handleEmiAction(user, fromNumber, parsed);
+    return;
+  }
+
+  // ── Savings goals ──
+  if (parsed.savings_action) {
+    await handleSavingsAction(user, fromNumber, parsed);
+    return;
+  }
+
+  // ── Split calculator ──
+  if (parsed.split_total > 0 && parsed.split_count > 1) {
+    const perPerson = parsed.split_total / parsed.split_count;
+    const desc      = parsed.split_description || 'kharcha';
+    await sendMessage(fromNumber,
+      `🧮 *Split Calculator*\n\n` +
+      `📋 ${capitalize(desc)}: ₹${fmtAmt(parsed.split_total)}\n` +
+      `👥 Logon ki sankhya: ${parsed.split_count}\n` +
+      `━━━━━━━━━━━━━━\n` +
+      `💰 *Har ek ka hissa: ₹${fmtAmt(perPerson)}*\n\n` +
+      `_Kisi ne zyada diya toh udhaar track karne ke liye:_\n` +
+      `_"Rahul ko 300 dena hai" — khata mein add karo_`
+    );
+    return;
+  }
+
+  // ── Reminders list ──
+  if (lower === 'reminders' || lower === 'reminders dikhao' || lower === 'upcoming reminders') {
+    await handleListReminders(user, fromNumber);
     return;
   }
 
@@ -354,6 +405,29 @@ _Kirana shop, friends, family — sab ke liye!_
 • "Ashish ko reminder bhejo" (WhatsApp alert)
 • "Ashish ki history download karo" (Excel)
 • "poora khata download karo" (full list)
+
+🏦 *EMI Track karo:*
+• "Home Loan EMI 12000 date 5"
+• "Car Loan EMI 8500 har 15 tarikh ko"
+• "meri EMI list"
+• _Bank SMS se EMI auto-detect hoti hai!_
+
+🎯 *Savings Goals:*
+• "Goa trip ke liye 20000 bachana hai"
+• "New Phone 15000, 3 mahine mein"
+• "Goa trip mein 5000 daalo"
+• "meri goals dikhao"
+
+🧮 *Split Calculator:*
+• "dinner 1200, hum 4 the"
+• "movie 600, 3 log"
+
+📸 *Receipt Auto-log:*
+• _Bill/receipt ki photo bhejo — automatically log ho jaayega!_
+
+🔔 *Reminders:*
+• "reminders dikhao" — upcoming alerts
+• _Jio/Airtel recharge SMS se auto-reminder set hota hai!_
 
 📱 *Bank SMS auto-track ke liye:*
 • "app install karo" likhke app link pao`;
@@ -559,6 +633,352 @@ async function handleKhataAction(user, fromNumber, parsed) {
   }
 }
 
+// ──────────────────────────────────────────────────────────
+// EMI HANDLER
+// ──────────────────────────────────────────────────────────
+async function handleEmiAction(user, fromNumber, parsed) {
+  const action  = parsed.emi_action;
+  const name    = parsed.emi_name;
+  const amount  = Number(parsed.emi_amount || 0);
+  const dueDay  = Number(parsed.emi_due_day || 0);
+
+  try {
+    // ── Add new EMI ──
+    if (action === 'add' && name && amount > 0 && dueDay >= 1 && dueDay <= 31) {
+      const emi = await addEmi(user.id, name, amount, dueDay);
+      await scheduleEmiReminder(user.id, emi);
+
+      const nextDue = getNextDueDate(dueDay);
+      const nextStr = nextDue.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+
+      await sendMessage(fromNumber,
+        `✅ *EMI added!*\n\n` +
+        `🏦 *${name}*\n` +
+        `💰 Amount: ₹${fmtAmt(amount)}\n` +
+        `📅 Due: ${dueDay}th of every month\n` +
+        `📅 Next due: *${nextStr}*\n` +
+        `🔔 2 din pehle reminder milega automatically!\n\n` +
+        `_"meri EMI list" — sabki list dekhne ke liye_`
+      );
+      return;
+    }
+
+    // ── List all EMIs ──
+    if (action === 'list') {
+      const emis = await listEmis(user.id, 'active');
+      await sendMessage(fromNumber, formatEmiList(emis));
+      return;
+    }
+
+    // ── Mark EMI as done/completed ──
+    if (action === 'done' && name) {
+      const emi = await findEmiByName(user.id, name);
+      if (!emi) {
+        await sendMessage(fromNumber,
+          `❌ "${name}" naam ki koi EMI nahi mili.\n_"meri EMI list" se check karo._`
+        );
+        return;
+      }
+      await updateEmiStatus(emi.id, 'completed');
+      await sendMessage(fromNumber,
+        `✅ *${emi.name}* completed mark kar diya! 🎉\n\n` +
+        `_Loan khatam ho gaya? Badhaai ho!_ 🎊`
+      );
+      return;
+    }
+
+    // Missing required fields
+    if (action === 'add') {
+      await sendMessage(fromNumber,
+        `❓ EMI add karne ke liye poori jankari chahiye:\n\n` +
+        `_"Home Loan EMI 12000 date 5"_\n` +
+        `_"Car Loan EMI 8500 har 15 tarikh ko"_`
+      );
+      return;
+    }
+
+    await sendMessage(fromNumber, `❓ EMI command samajh nahi aaya. "meri EMI list" ya "Home Loan EMI 12000 date 5" try karo.`);
+
+  } catch (err) {
+    console.error('[EMI] Error:', err.message);
+    await sendMessage(fromNumber, `❌ Kuch gadbad ho gayi. Dobara try karo.`);
+  }
+}
+
+// ──────────────────────────────────────────────────────────
+// SAVINGS GOALS HANDLER
+// ──────────────────────────────────────────────────────────
+async function handleSavingsAction(user, fromNumber, parsed) {
+  const action     = parsed.savings_action;
+  const goalName   = parsed.savings_goal_name;
+  const target     = Number(parsed.savings_target_amount || 0);
+  const addAmount  = Number(parsed.savings_add_amount || 0);
+  const deadlineRaw = parsed.savings_deadline || null;
+
+  try {
+    // ── Create new goal ──
+    if (action === 'add_goal' && goalName && target > 0) {
+      // Parse deadline (could be "3 mahine mein", "December", "31-12-2026")
+      const deadline = parseDeadline(deadlineRaw);
+      const goal = await addGoal(user.id, goalName, target, deadline);
+
+      let msg =
+        `🎯 *Savings goal set!*\n\n` +
+        `📝 Goal: *${goal.name}*\n` +
+        `💰 Target: ₹${fmtAmt(target)}\n`;
+
+      if (deadline) {
+        const dStr = new Date(deadline).toLocaleDateString('en-IN', {
+          day: '2-digit', month: 'long', year: 'numeric'
+        });
+        msg += `📅 Deadline: ${dStr}\n`;
+      }
+
+      msg +=
+        `\n_Amount add karne ke liye:_\n` +
+        `_"${goalName} mein 5000 daalo"_`;
+
+      await sendMessage(fromNumber, msg);
+      return;
+    }
+
+    // ── Add money to a goal ──
+    if (action === 'add_money' && addAmount > 0) {
+      let goal = null;
+
+      if (goalName) {
+        goal = await findGoalByName(user.id, goalName);
+      } else {
+        // If no goal name given, find the first active goal
+        const goals = await listGoals(user.id);
+        if (goals.length === 1) goal = goals[0];
+      }
+
+      if (!goal) {
+        const goals = await listGoals(user.id);
+        if (goals.length === 0) {
+          await sendMessage(fromNumber,
+            `❌ Koi active goal nahi hai.\n_"Goa trip ke liye 20000 bachana hai" se goal banao._`
+          );
+        } else {
+          const names = goals.map(g => `• ${g.name}`).join('\n');
+          await sendMessage(fromNumber,
+            `❓ Kaun se goal mein daalen?\n\n${names}\n\n` +
+            `_"${goals[0].name} mein ${addAmount} daalo" likhein._`
+          );
+        }
+        return;
+      }
+
+      const updated = await addToGoal(goal.id, addAmount);
+      const progressMsg = formatGoalProgress(updated);
+
+      let msg = `✅ *₹${fmtAmt(addAmount)} save ho gaya!*\n\n${progressMsg}`;
+      if (updated.status === 'completed') {
+        msg += `\n\n🎉 *Goal achieve ho gayi!* Badhaai ho! 🎊`;
+      }
+
+      await sendMessage(fromNumber, msg);
+      return;
+    }
+
+    // ── List all goals ──
+    if (action === 'list') {
+      const goals = await listGoals(user.id);
+      await sendMessage(fromNumber, formatGoalsList(goals));
+      return;
+    }
+
+    // ── Check a specific goal's progress ──
+    if (action === 'check') {
+      let goal = null;
+      if (goalName) {
+        goal = await findGoalByName(user.id, goalName);
+      }
+      if (!goal) {
+        const goals = await listGoals(user.id);
+        if (goals.length === 0) {
+          await sendMessage(fromNumber, `❌ Koi savings goal nahi hai. "Goa trip ke liye 20000 bachana hai" se shuru karo.`);
+        } else {
+          await sendMessage(fromNumber, formatGoalsList(goals));
+        }
+        return;
+      }
+      await sendMessage(fromNumber, formatGoalProgress(goal));
+      return;
+    }
+
+    await sendMessage(fromNumber,
+      `❓ Savings command samajh nahi aaya.\n\n` +
+      `_"Goa trip ke liye 20000 bachana hai"_\n` +
+      `_"Goal mein 5000 daalo"_\n` +
+      `_"meri goals dikhao"_`
+    );
+
+  } catch (err) {
+    console.error('[Savings] Error:', err.message);
+    await sendMessage(fromNumber, `❌ Kuch gadbad ho gayi. Dobara try karo.`);
+  }
+}
+
+// ──────────────────────────────────────────────────────────
+// RECEIPT PHOTO HANDLER
+// ──────────────────────────────────────────────────────────
+async function handleReceiptPhoto(user, fromNumber, mediaUrl) {
+  await sendMessage(fromNumber, `📸 Receipt scan ho raha hai... thoda wait karo ⏳`);
+
+  let receiptData;
+  try {
+    receiptData = await extractReceiptData(mediaUrl);
+  } catch (err) {
+    console.error('[Vision] extractReceiptData error:', err.message);
+    await sendMessage(fromNumber,
+      `❌ Receipt read nahi hua.\n\n` +
+      `_Try karo:_\n` +
+      `• Photo clear aur bright honi chahiye\n` +
+      `• Bill text clearly visible hona chahiye\n\n` +
+      `Ya manually type karo: "chai 30"`
+    );
+    return;
+  }
+
+  if (!receiptData.items || receiptData.items.length === 0) {
+    await sendMessage(fromNumber, `❌ Receipt mein koi items nahi mile. Manually type karo.`);
+    return;
+  }
+
+  // Log each item as an expense
+  const loggedItems = [];
+  for (const item of receiptData.items) {
+    if (!item.amount || item.amount <= 0) continue;
+    try {
+      const { confirmMsg } = await logExpense({
+        userId:      user.id,
+        amount:      item.amount,
+        category:    item.category || 'other',
+        description: item.description || 'Receipt item',
+        source:      'chat',
+        rawInput:    null,
+        toNumber:    fromNumber
+      });
+      loggedItems.push({ name: item.description, amount: item.amount });
+    } catch (logErr) {
+      console.error('[Vision] Log item failed:', logErr.message);
+    }
+  }
+
+  if (loggedItems.length === 0) {
+    await sendMessage(fromNumber, `❌ Koi item log nahi hua. Manually type karo.`);
+    return;
+  }
+
+  const merchant = receiptData.merchant_name ? `*${receiptData.merchant_name}*` : 'Receipt';
+  const itemLines = loggedItems.map(i => `  • ${i.name}: ₹${fmtAmt(i.amount)}`).join('\n');
+  const total     = loggedItems.reduce((s, i) => s + i.amount, 0);
+
+  await sendMessage(fromNumber,
+    `✅ *Receipt logged!*\n\n` +
+    `🏪 ${merchant}\n\n` +
+    itemLines +
+    `\n━━━━━━━━━━━━━━\n` +
+    `💰 Total: *₹${fmtAmt(total)}*\n\n` +
+    `_${loggedItems.length} item${loggedItems.length > 1 ? 's' : ''} automatically log ho gaye!_ 🎉`
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// REMINDERS LIST HANDLER
+// ──────────────────────────────────────────────────────────
+async function handleListReminders(user, fromNumber) {
+  try {
+    const reminders = await listReminders(user.id);
+    if (reminders.length === 0) {
+      await sendMessage(fromNumber,
+        `🔔 *Koi upcoming reminder nahi hai.*\n\n` +
+        `_EMI add karo:_ "Home Loan EMI 12000 date 5"\n` +
+        `_Recharge SMS bhejne par auto-reminder set hoga!_`
+      );
+      return;
+    }
+
+    const lines = reminders.slice(0, 10).map(r => {
+      const due   = new Date(r.due_date);
+      const dStr  = due.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+      const days  = Math.ceil((due - new Date()) / (1000 * 60 * 60 * 24));
+      const emoji = r.type === 'emi' ? '🏦' : r.type === 'recharge' ? '📱' : '💡';
+      const amtStr = r.amount ? ` — ₹${fmtAmt(r.amount)}` : '';
+      return `${emoji} *${r.name}*${amtStr}\n   📅 ${dStr} (${days} din mein)`;
+    });
+
+    await sendMessage(fromNumber,
+      `🔔 *Upcoming Reminders*\n\n` +
+      lines.join('\n\n') +
+      (reminders.length > 10 ? `\n\n_...aur ${reminders.length - 10} reminders_` : '')
+    );
+  } catch (err) {
+    console.error('[Reminders] List error:', err.message);
+    await sendMessage(fromNumber, `❌ Reminders load nahi hue. Dobara try karo.`);
+  }
+}
+
+// ──────────────────────────────────────────────────────────
+// UTILS
+// ──────────────────────────────────────────────────────────
+
+function fmtAmt(n) {
+  const num = Number(n);
+  return Number.isInteger(num) ? num.toLocaleString('en-IN') : num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function capitalize(s) {
+  if (!s) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Parse a deadline string into a YYYY-MM-DD date.
+ * Handles: "3 mahine mein", "December", "31-12-2026", etc.
+ */
+function parseDeadline(raw) {
+  if (!raw) return null;
+  const lower = raw.toLowerCase().trim();
+
+  // "X mahine mein" → X months from now
+  const mahineMatch = lower.match(/(\d+)\s*mahine/);
+  if (mahineMatch) {
+    const d = new Date();
+    d.setMonth(d.getMonth() + parseInt(mahineMatch[1]));
+    return d.toISOString().split('T')[0];
+  }
+
+  // "X saal mein" → X years from now
+  const saalMatch = lower.match(/(\d+)\s*saal/);
+  if (saalMatch) {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + parseInt(saalMatch[1]));
+    return d.toISOString().split('T')[0];
+  }
+
+  // Month name "December", "March" → end of that month this year or next
+  const months = { january:1, february:2, march:3, april:4, may:5, june:6,
+                   july:7, august:8, september:9, october:10, november:11, december:12,
+                   jan:1, feb:2, mar:3, apr:4, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+  for (const [m, idx] of Object.entries(months)) {
+    if (lower.includes(m)) {
+      const now = new Date();
+      let year  = now.getFullYear();
+      if (idx <= now.getMonth() + 1) year++; // already passed this year
+      return new Date(year, idx - 1, 28).toISOString().split('T')[0]; // safe end-of-month
+    }
+  }
+
+  // Direct date "31-12-2026" or "2026-12-31"
+  const parsed = new Date(raw.replace(/-/g, '/'));
+  if (!isNaN(parsed)) return parsed.toISOString().split('T')[0];
+
+  return null;
+}
+
 function getWelcomeMessage() {
   const apkUrl = process.env.APK_DOWNLOAD_URL || 'https://github.com/mrsnupan/kharcha-ai/releases/latest/download/app-release-unsigned.apk';
   return (
@@ -568,8 +988,13 @@ function getWelcomeMessage() {
     `• "chai 30" — kharcha log karo\n` +
     `• "Bhai ko 2000 diye" — udhaar track karo\n` +
     `• "500 ka saman Ashish ko diya" — kirana khata\n` +
-    `• "aaj kitna gaya?" — report dekho\n` +
-    `• 🎤 Voice message bhi bhej sakte ho!\n\n` +
+    `• "aaj salary aayi 45000" — income track karo\n` +
+    `• "Goa trip ke liye 20000 bachana hai" — savings goal\n` +
+    `• "Home Loan EMI 12000 date 5" — EMI reminder\n` +
+    `• "dinner 1200, hum 4 the" — split calculator\n` +
+    `• 📸 Bill ki photo bhejo — auto log!\n` +
+    `• 🎤 Voice message bhi bhej sakte ho!\n` +
+    `• "aaj kitna gaya?" — report dekho\n\n` +
     `📱 *Bank SMS automatic track karne ke liye:*\n` +
     `App install karo: ${apkUrl}\n\n` +
     `_"help" likhoge toh poora menu milega_ 😊`

@@ -146,6 +146,59 @@ CREATE TABLE IF NOT EXISTS deletion_requests (
 );
 
 -- ============================================================
+-- EMIs — Home loan, car loan, personal loan installments
+-- ============================================================
+CREATE TABLE IF NOT EXISTS emis (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,                -- "Home Loan", "Car Loan EMI"
+  amount     NUMERIC(12, 2) NOT NULL,
+  due_day    INTEGER NOT NULL CHECK (due_day BETWEEN 1 AND 31), -- day of month
+  start_date DATE,
+  end_date   DATE,                         -- null = ongoing
+  status     TEXT NOT NULL DEFAULT 'active', -- active | paused | completed
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_emis_user   ON emis(user_id);
+CREATE INDEX IF NOT EXISTS idx_emis_status ON emis(status);
+
+-- ============================================================
+-- SAVINGS GOALS — "Goa trip 20000", "New phone 15000"
+-- ============================================================
+CREATE TABLE IF NOT EXISTS savings_goals (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL,            -- "Goa Trip", "New Phone"
+  target_amount  NUMERIC(12, 2) NOT NULL,
+  current_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  deadline       DATE,                     -- optional target date
+  status         TEXT NOT NULL DEFAULT 'active', -- active | completed | cancelled
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_goals_user   ON savings_goals(user_id);
+CREATE INDEX IF NOT EXISTS idx_goals_status ON savings_goals(status);
+
+-- ============================================================
+-- REMINDERS — EMI due, recharge due, bill due
+-- ============================================================
+CREATE TABLE IF NOT EXISTS reminders (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type               TEXT NOT NULL,        -- 'emi' | 'recharge' | 'bill' | 'custom'
+  name               TEXT NOT NULL,        -- "Jio Recharge", "Home Loan EMI"
+  amount             NUMERIC(12, 2),
+  due_date           DATE NOT NULL,
+  remind_days_before INTEGER NOT NULL DEFAULT 2,
+  notified           BOOLEAN NOT NULL DEFAULT false,
+  recurring          TEXT,                 -- 'monthly' | 'yearly' | null
+  emi_id             UUID REFERENCES emis(id) ON DELETE CASCADE,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_reminders_user     ON reminders(user_id);
+CREATE INDEX IF NOT EXISTS idx_reminders_due      ON reminders(due_date);
+CREATE INDEX IF NOT EXISTS idx_reminders_notified ON reminders(notified);
+
+-- ============================================================
 -- INCOMES — Salary, freelance, rent, any money received
 -- ============================================================
 CREATE TABLE IF NOT EXISTS incomes (
