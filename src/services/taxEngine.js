@@ -52,14 +52,17 @@ const STD_DEDUCTION_NEW = 75000;  // salaried, new regime — unchanged from Bud
 // ──────────────────────────────────────────────────────────
 
 const DEDUCTION_LIMITS = {
-  '80C':   { limit: 150000, label: 'Section 80C',  desc: 'PPF, ELSS, LIC, EPF, Home Loan Principal, Tuition Fees' },
-  '80D':   { limit: 25000,  label: 'Section 80D',  desc: 'Health Insurance Premium' },
-  '80D_SENIOR': { limit: 50000, label: '80D (Senior Citizen)', desc: 'Health Insurance for Senior Citizen' },
-  '80E':   { limit: null,   label: 'Section 80E',  desc: 'Education Loan Interest (no ceiling)' },
-  '24b':   { limit: 200000, label: 'Section 24(b)', desc: 'Home Loan Interest (self-occupied)' },
-  '80CCD': { limit: 50000,  label: 'Section 80CCD(1B)', desc: 'Additional NPS Contribution' },
-  '80G':   { limit: null,   label: 'Section 80G',  desc: 'Donations (varies by recipient)' },
-  '80TTA': { limit: 10000,  label: 'Section 80TTA', desc: 'Savings Account Interest' }
+  '80C':         { limit: 150000, label: 'Section 80C',             desc: 'PPF, ELSS, LIC, EPF, Home Loan Principal, Tuition Fees' },
+  '80D':         { limit: 25000,  label: 'Section 80D',             desc: 'Health Insurance Premium (self/family)' },
+  '80D_self':    { limit: 25000,  label: '80D Self/Family',         desc: 'Health Insurance for self & family (≤60 yrs)' },
+  '80D_parents': { limit: 25000,  label: '80D Parents',             desc: 'Health Insurance for parents (₹50K if senior citizen)' },
+  '80D_SENIOR':  { limit: 50000,  label: '80D Senior Citizen',      desc: 'Health Insurance for Senior Citizen parent (60+ yrs)' },
+  '80E':         { limit: null,   label: 'Section 80E',             desc: 'Education Loan Interest (no ceiling)' },
+  '24b':         { limit: 200000, label: 'Section 24(b)',           desc: 'Home Loan Interest (self-occupied)' },
+  '80CCD':       { limit: 50000,  label: 'Section 80CCD(1B)',       desc: 'Additional NPS Contribution (over 80C limit)' },
+  '80G':         { limit: null,   label: 'Section 80G',             desc: 'Donations (varies by recipient)' },
+  '80TTA':       { limit: 10000,  label: 'Section 80TTA',           desc: 'Savings Account Interest (non-senior)' },
+  '80TTB':       { limit: 50000,  label: 'Section 80TTB',           desc: 'Interest income for Senior Citizens (60+)' }
 };
 
 // Subcategory labels for display
@@ -234,8 +237,22 @@ function calcNewRegime(grossIncome, isSalaried = true) {
   const surcharge = calcSurcharge(taxableIncome, baseTax, 'new');
   const rebate    = taxableIncome <= REBATE_NEW.maxIncome ? Math.min(baseTax, REBATE_NEW.maxRebate) : 0;
   const taxAfterRebate = Math.max(0, baseTax - rebate);
-  const cess      = Math.round((taxAfterRebate + surcharge) * CESS_RATE);
-  const totalTax  = taxAfterRebate + surcharge + cess;
+
+  // ── Marginal Relief (Budget 2025) ──────────────────────────
+  // When taxable income slightly exceeds ₹12L (the 87A rebate threshold),
+  // tax cannot exceed (taxable_income − ₹12L). This prevents the cliff edge
+  // where earning ₹1 extra causes a massive tax jump.
+  // Applies for taxable income between ₹12L and ~₹12,70,588.
+  let taxBeforeCess = taxAfterRebate + surcharge;
+  if (taxableIncome > REBATE_NEW.maxIncome) {
+    const marginalCap = taxableIncome - REBATE_NEW.maxIncome; // income above ₹12L
+    if (taxBeforeCess > marginalCap) {
+      taxBeforeCess = marginalCap; // cap tax to marginal relief amount
+    }
+  }
+
+  const cess     = Math.round(taxBeforeCess * CESS_RATE);
+  const totalTax = taxBeforeCess + cess;
 
   return {
     regime:        'new',
@@ -247,7 +264,7 @@ function calcNewRegime(grossIncome, isSalaried = true) {
     rebate,
     cess,
     totalTax:      Math.max(0, totalTax),
-    effectiveRate: grossIncome > 0 ? ((totalTax / grossIncome) * 100).toFixed(1) : '0.0',
+    effectiveRate: grossIncome > 0 ? ((Math.max(0, totalTax) / grossIncome) * 100).toFixed(1) : '0.0',
     monthlyTDS:    Math.round(Math.max(0, totalTax) / 12)
   };
 }
@@ -311,84 +328,103 @@ function calcAdvanceTaxInstallment(estimatedAnnualTax, quarter, paidSoFar = 0) {
  * - Deductions logged so far this FY
  * - Months remaining in FY
  */
-function getTaxNudges(annualIncome, deductionTotals = {}, hasSeniorParent = false) {
-  const nudges = [];
+/**
+ * @param {number} annualIncome
+ * @param {object} deductionTotals
+ * @param {boolean} hasSeniorParent
+ * @param {string} userRegime - 'old' | 'new' (default 'new')
+ */
+function getTaxNudges(annualIncome, deductionTotals = {}, hasSeniorParent = false, userRegime = 'new') {
+  const nudges    = [];
   const remaining = monthsRemainingInFY();
+  const isOld     = userRegime === 'old';
 
-  // 80C nudge
-  const used80C = deductionTotals['80C'] || 0;
-  const left80C = Math.max(0, 150000 - used80C);
-  if (annualIncome > 300000 && left80C > 0) {
-    const monthly80C = Math.round(left80C / Math.max(1, remaining));
-    nudges.push(
-      `💡 *80C:* ₹${fmt(left80C)} abhi baaki hai (limit ₹1.5L).\n` +
-      `   ELSS, PPF, ya LIC mein invest karo.\n` +
-      `   _Har mahine ₹${fmt(monthly80C)} daaloge toh limit full ho jaayegi!_`
-    );
+  // ── New Regime users: show Budget 2025 zero-tax benefit ──
+  if (!isOld) {
+    if (annualIncome > 0 && annualIncome <= 1275000) {
+      nudges.push(
+        `🎉 *Budget 2025 — Zero Tax!*\n` +
+        `   Income ₹12.75L tak *zero tax* under New Regime.\n` +
+        `   (₹12L rebate + ₹75K standard deduction for salaried)\n` +
+        `   _"tax kitna banega?" — confirm karo_`
+      );
+    } else if (annualIncome > 1275000) {
+      nudges.push(
+        `💡 *New Regime (Budget 2025)* is default and better for most.\n` +
+        `   No deductions needed — clean & simple slabs.\n` +
+        `   _"old vs new regime compare karo" — sirf check ke liye_`
+      );
+    }
+    // New regime: 80C/80D/24b deductions don't apply — skip those tips
+    // Only show NPS employer tip (80CCD(2) is allowed in new regime)
+    if (annualIncome > 600000) {
+      nudges.push(
+        `💡 *NPS 80CCD(2):* Employer NPS contribution (up to 10% of salary)\n` +
+        `   is allowed as deduction *even in New Regime!*\n` +
+        `   _Ask your HR to route CTC via NPS for extra tax saving._`
+      );
+    }
   }
 
-  // 80D nudge
-  const used80D = (deductionTotals['80D_self'] || 0) + (deductionTotals['80D_parents'] || 0);
-  const max80D  = 25000 + (hasSeniorParent ? 50000 : 25000);
-  const left80D = Math.max(0, max80D - used80D);
-  if (annualIncome > 300000 && left80D > 0 && used80D === 0) {
-    nudges.push(
-      `💡 *80D:* Health insurance pe ₹${fmt(max80D)} tak tax free hai!\n` +
-      `   Abhi koi health insurance log nahi kiya.\n` +
-      `   _Family health insurance lena consider karo._`
-    );
-  }
+  // ── Old Regime users: show deduction tips ──
+  if (isOld) {
+    // 80C nudge
+    const used80C = deductionTotals['80C'] || 0;
+    const left80C = Math.max(0, 150000 - used80C);
+    if (annualIncome > 300000 && left80C > 0) {
+      const monthly80C = Math.round(left80C / Math.max(1, remaining));
+      nudges.push(
+        `💡 *80C:* ₹${fmt(left80C)} abhi baaki hai (limit ₹1.5L).\n` +
+        `   ELSS, PPF, ya LIC mein invest karo.\n` +
+        `   _Har mahine ₹${fmt(monthly80C)} daaloge toh limit full ho jaayegi!_`
+      );
+    }
 
-  // 80CCD(1B) NPS nudge
-  const used80CCD = deductionTotals['80CCD'] || 0;
-  if (annualIncome > 600000 && used80CCD === 0) {
-    nudges.push(
-      `💡 *80CCD(1B):* NPS mein ₹50,000 extra invest karo!\n` +
-      `   Ye 80C ke ₹1.5L se ALAG hai — total ₹2L savings!\n` +
-      `   _NPS se retirement + tax dono fayda._`
-    );
-  }
+    // 80D nudge
+    const used80D = (deductionTotals['80D_self'] || 0) + (deductionTotals['80D_parents'] || 0);
+    const max80D  = 25000 + (hasSeniorParent ? 50000 : 25000);
+    if (annualIncome > 300000 && used80D === 0) {
+      nudges.push(
+        `💡 *80D:* Health insurance pe ₹${fmt(max80D)} tak tax free hai!\n` +
+        `   Abhi koi health insurance log nahi kiya.\n` +
+        `   _Family health insurance lena consider karo._`
+      );
+    }
 
-  // Home loan nudge
-  if (annualIncome > 500000) {
-    const used24b   = deductionTotals['24b'] || 0;
-    const used80C_hlp = 0; // principal — tracked in 80C
-    if (used24b === 0) {
+    // 80CCD(1B) NPS nudge
+    const used80CCD = deductionTotals['80CCD'] || 0;
+    if (annualIncome > 600000 && used80CCD === 0) {
+      nudges.push(
+        `💡 *80CCD(1B):* NPS mein ₹50,000 extra invest karo!\n` +
+        `   Ye 80C ke ₹1.5L se ALAG hai — total ₹2L savings!\n` +
+        `   _NPS se retirement + tax dono fayda._`
+      );
+    }
+
+    // Home loan nudge
+    if (annualIncome > 500000 && !(deductionTotals['24b'] || 0)) {
       nudges.push(
         `💡 *24(b):* Home loan interest pe ₹2L tak deduction milta hai!\n` +
         `   _Home loan hai toh interest amount log karo._`
       );
     }
-  }
 
-  // Regime switch nudge — compare
-  if (annualIncome > 0) {
+    // Regime switch nudge for old regime users
     const totalDeductions = (deductionTotals['80C'] || 0) +
       (deductionTotals['80D_self'] || 0) + (deductionTotals['80D_parents'] || 0) +
       (deductionTotals['80E'] || 0) + (deductionTotals['24b'] || 0) +
       (deductionTotals['80CCD'] || 0);
-
-    // Budget 2025: New Regime is default & usually better now.
-    // Old regime only wins when deductions are very high (typically >₹3.75L+)
-    if (annualIncome <= 1275000 && annualIncome > 0) {
-      // Salaried with income up to ₹12.75L — likely zero tax under new regime
+    if (totalDeductions < 375000 && annualIncome > 1275000) {
       nudges.push(
-        `🎉 *Budget 2025:* Income ₹12.75L tak *zero tax* under New Regime!\n` +
-        `   (₹12L rebate + ₹75K standard deduction for salaried)\n` +
-        `   _"tax kitna banega?" — confirm karo_`
-      );
-    } else if (totalDeductions < 375000 && annualIncome > 1275000) {
-      nudges.push(
-        `💡 *Regime Tip:* Abhi tak ₹${fmt(totalDeductions)} deductions hain.\n` +
-        `   New Regime (Budget 2025) zyada logon ke liye better hai ab.\n` +
-        `   Old Regime sirf tab faydemand jab deductions ~₹3.75L+ hoon.\n` +
+        `⚠️ *Regime Check:* Deductions ₹${fmt(totalDeductions)} hain.\n` +
+        `   New Regime better ho sakta hai (Budget 2025).\n` +
         `   _"old vs new regime compare karo" — exact comparison ke liye_`
       );
     }
   }
 
   if (nudges.length === 0) {
-    nudges.push(`✅ *Bahut achha!* Aapke deductions well-optimized lag rahe hain.\n_"tax kitna banega?" — exact estimate ke liye_`);
+    nudges.push(`✅ *Bahut achha!* Tax planning well-optimized lag rahi hai.\n_"tax kitna banega?" — exact estimate ke liye_`);
   }
 
   return nudges;

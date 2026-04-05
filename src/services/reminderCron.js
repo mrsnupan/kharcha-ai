@@ -314,8 +314,10 @@ async function processAdvanceTaxReminders(quarter) {
         const annualIncome = (incomeRows || []).reduce((s, r) => s + Number(r.amount), 0);
         if (annualIncome <= 0) continue;
 
-        // Estimate tax (use new regime as baseline for non-salaried)
-        const taxResult = calcNewRegime(annualIncome, false);
+        // Estimate tax using user's preferred regime (non-salaried = no std deduction)
+        const taxResult = user.tax_regime === 'old'
+          ? calcOldRegime(annualIncome, {}, false, false)
+          : calcNewRegime(annualIncome, false);
         if (taxResult.totalTax < 10000) continue; // Advance tax not applicable < ₹10K
 
         const info        = QUARTER_LABELS[quarter];

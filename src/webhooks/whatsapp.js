@@ -1143,7 +1143,11 @@ async function handleTaxAction(user, fromNumber, parsed) {
         financialYear: fy
       });
 
-      const limit    = DEDUCTION_LIMITS[parsed.tax_section]?.limit;
+      // Resolve dynamic limit — 80D_parents changes based on senior citizen flag
+      let limit = DEDUCTION_LIMITS[parsed.tax_section]?.limit;
+      if (parsed.tax_section === '80D_parents') {
+        limit = hasSeniorParent ? 50000 : 25000;
+      }
       const limitStr = limit ? `₹${taxFmt(limit)}` : 'No limit';
       const summary  = await getDeductionSummary(user.id, fy, hasSeniorParent);
       const secTotal = summary[parsed.tax_section]?.logged || parsed.tax_amount;
@@ -1221,7 +1225,7 @@ async function handleTaxAction(user, fromNumber, parsed) {
         '24b':         summary['24b']?.logged         || 0,
         '80CCD':       summary['80CCD']?.logged       || 0
       };
-      const nudges = getTaxNudges(incomeData.total, dedTotals, hasSeniorParent);
+      const nudges = getTaxNudges(incomeData.total, dedTotals, hasSeniorParent, profile.tax_regime || 'new');
 
       await sendMessage(fromNumber,
         `💡 *Tax Saving Tips — FY ${fy}*\n\n` +
