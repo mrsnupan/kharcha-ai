@@ -147,6 +147,122 @@ async function exportFullLedgerExcel(ownerName, customers) {
   return filePath;
 }
 
+/**
+ * Generate Excel for a user's full expense history.
+ * Returns temp file path.
+ */
+async function exportExpenseExcel(expenses, periodLabel, userName) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'KharchaAI';
+  workbook.created = new Date();
+
+  const sheet = workbook.addWorksheet('Expense History');
+
+  // Title rows
+  sheet.mergeCells('A1:F1');
+  sheet.getCell('A1').value = `KharchaAI — Expense History${userName ? ` (${userName})` : ''}`;
+  sheet.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FF1B5E20' } };
+  sheet.getCell('A1').alignment = { horizontal: 'center' };
+
+  sheet.mergeCells('A2:F2');
+  sheet.getCell('A2').value = periodLabel || `Generated: ${formatDate(new Date())}`;
+  sheet.getCell('A2').alignment = { horizontal: 'center' };
+
+  sheet.addRow([]);
+
+  // Column headers
+  const headerRow = sheet.addRow(['Date', 'Category', 'Description', 'Amount (₹)', 'Source', 'Time']);
+  headerRow.eachCell(cell => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B5E20' } };
+    cell.alignment = { horizontal: 'center' };
+  });
+
+  sheet.columns = [
+    { key: 'date',     width: 14 },
+    { key: 'category', width: 16 },
+    { key: 'desc',     width: 30 },
+    { key: 'amount',   width: 14 },
+    { key: 'source',   width: 12 },
+    { key: 'time',     width: 10 },
+  ];
+
+  // Category → colour map for subtle row tinting
+  const CAT_COLORS = {
+    food: 'FFFFF9C4', grocery: 'FFF1F8E9', transport: 'FFE3F2FD',
+    health: 'FFFCE4EC', education: 'FFEDE7F6', entertainment: 'FFFBE9E7',
+    utility: 'FFE0F7FA', clothing: 'FFFDECFF', personal: 'FFFFF3E0',
+    emi: 'FFE8EAF6', savings: 'FFE8F5E9', income: 'FFF1F8E9',
+    other: 'FFFAFAFA'
+  };
+
+  // Data rows — newest first (already sorted by caller)
+  for (const exp of expenses) {
+    const d   = new Date(exp.transaction_date || exp.created_at);
+    const amt = Number(exp.amount);
+    const bgColor = CAT_COLORS[exp.category] || 'FFFAFAFA';
+
+    const row = sheet.addRow({
+      date:     formatDate(exp.transaction_date || exp.created_at),
+      category: exp.category ? (exp.category.charAt(0).toUpperCase() + exp.category.slice(1)) : 'Other',
+      desc:     exp.description || '',
+      amount:   amt.toFixed(2),
+      source:   exp.source || 'chat',
+      time:     d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+    });
+
+    row.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+    });
+    row.getCell('amount').font = { bold: true };
+  }
+
+  // Summary footer
+  const total = expenses.reduce((s, e) => s + Number(e.amount), 0);
+  sheet.addRow([]);
+  const totalRow = sheet.addRow(['', '', 'TOTAL', total.toFixed(2), '', '']);
+  totalRow.getCell('C').font = { bold: true };
+  totalRow.getCell('D').font = { bold: true, color: { argb: 'FFCC0000' } };
+
+  // Category-wise breakdown on a second sheet
+  const catSheet = workbook.addWorksheet('Category Breakdown');
+  catSheet.mergeCells('A1:C1');
+  catSheet.getCell('A1').value = 'Category-wise Breakdown';
+  catSheet.getCell('A1').font = { bold: true, size: 13, color: { argb: 'FF1B5E20' } };
+  catSheet.addRow([]);
+
+  const catHdr = catSheet.addRow(['Category', 'Transactions', 'Total (₹)']);
+  catHdr.eachCell(cell => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B5E20' } };
+  });
+  catSheet.columns = [
+    { key: 'cat',   width: 20 },
+    { key: 'count', width: 16 },
+    { key: 'total', width: 16 },
+  ];
+
+  const catMap = {};
+  for (const exp of expenses) {
+    const c = exp.category || 'other';
+    if (!catMap[c]) catMap[c] = { count: 0, total: 0 };
+    catMap[c].count++;
+    catMap[c].total += Number(exp.amount);
+  }
+  const sortedCats = Object.entries(catMap).sort((a, b) => b[1].total - a[1].total);
+  for (const [cat, { count, total: catTotal }] of sortedCats) {
+    catSheet.addRow({
+      cat:   cat.charAt(0).toUpperCase() + cat.slice(1),
+      count,
+      total: catTotal.toFixed(2)
+    });
+  }
+
+  const filePath = path.join(os.tmpdir(), `expenses_${Date.now()}.xlsx`);
+  await workbook.xlsx.writeFile(filePath);
+  return filePath;
+}
+
 // ──────────────────────────────────────────────────────────
 // PDF EXPORT
 // ──────────────────────────────────────────────────────────
@@ -288,6 +404,7 @@ function deleteTempFile(filePath) {
 module.exports = {
   exportCustomerExcel,
   exportFullLedgerExcel,
+  exportExpenseExcel,
   exportCustomerPDF,
   exportFullLedgerPDF,
   deleteTempFile,

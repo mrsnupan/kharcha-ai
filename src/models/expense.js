@@ -149,6 +149,55 @@ async function getLastExpense(userId) {
 }
 
 /**
+ * Update the amount of the most recent expense.
+ * Returns the updated expense or null.
+ */
+async function updateLastExpenseAmount(userId, newAmount) {
+  const last = await getLastExpense(userId);
+  if (!last) return null;
+
+  const { data, error } = await supabase
+    .from('expenses')
+    .update({ amount: Number(newAmount) })
+    .eq('id', last.id)
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return { old: last, updated: data };
+}
+
+/**
+ * Update the most recent expense matching oldAmount to newAmount.
+ * Returns { old, updated } or null.
+ */
+async function updateExpenseAmount(userId, oldAmount, newAmount) {
+  const { data, error } = await supabase
+    .from('expenses')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('amount', Number(oldAmount))
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const { data: updated, error: updErr } = await supabase
+    .from('expenses')
+    .update({ amount: Number(newAmount) })
+    .eq('id', data.id)
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (updErr) throw updErr;
+  return { old: data, updated };
+}
+
+/**
  * Delete a specific expense by ID (must belong to user)
  */
 async function deleteExpense(userId, expenseId) {
@@ -199,6 +248,8 @@ module.exports = {
   getLastMonthExpenses,
   getCategoryMonthExpenses,
   getLastExpense,
+  updateLastExpenseAmount,
+  updateExpenseAmount,
   deleteExpense,
   deleteLastExpense,
   deleteExpenseByAmount

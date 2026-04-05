@@ -65,6 +65,13 @@ If the message contains a SINGLE expense or query, return a JSON object:
   "expense_delete": <boolean, true if user wants to delete/undo an expense entry>,
   "delete_last": <boolean, true if user says "last entry", "last wali", "abhi jo daala">,
   "delete_amount": <number if user mentions a specific amount to delete, 0 otherwise>,
+  "expense_edit": <boolean, true if user wants to correct/update an expense amount>,
+  "edit_last": <boolean, true if user wants to edit the last/most recent entry>,
+  "edit_old_amount": <number — the wrong/old amount to find (0 if editing last entry)>,
+  "edit_new_amount": <number — the correct new amount>,
+  "expense_export": <boolean, true if user wants to download their expense history as Excel>,
+  "export_period": <"monthly" | "weekly" | "all" | null — which period to export>,
+  "set_senior_parent": <boolean | null — true if user says they have a senior citizen parent, false if removing flag>,
   "user_name": <string if user is introducing themselves e.g. "mera naam Rahul hai" → "Rahul", null otherwise>
 }
 
@@ -160,6 +167,23 @@ Rules:
 - "tax summary PDF download karo" → tax_action:"export_pdf"
 - "advance tax kitna bharna hai?" → tax_action:"advance_tax"
 - "old vs new regime compare karo" → tax_action:"tax_estimate"
+- "last entry 300 thi, 200 tha actually" → expense_edit:true, edit_last:true, edit_new_amount:200
+- "last wali galat hai, 150 tha" → expense_edit:true, edit_last:true, edit_new_amount:150
+- "abhi jo daala 400 tha, 350 tha" → expense_edit:true, edit_last:true, edit_new_amount:350
+- "500 wali entry 450 thi actually" → expense_edit:true, edit_old_amount:500, edit_new_amount:450
+- "1200 ka kharcha 1100 tha" → expense_edit:true, edit_old_amount:1200, edit_new_amount:1100
+- "last entry ka amount correct karo 75" → expense_edit:true, edit_last:true, edit_new_amount:75
+- "meri expense history download karo" → expense_export:true, export_period:"all"
+- "is mahine ka expense Excel download karo" → expense_export:true, export_period:"monthly"
+- "poora kharcha history download" → expense_export:true, export_period:"all"
+- "expense report download" → expense_export:true, export_period:"monthly"
+- "is hafte ka expense excel" → expense_export:true, export_period:"weekly"
+- "mere maa senior citizen hain" → set_senior_parent:true
+- "mera papa ki age 65 hai" → set_senior_parent:true
+- "parents senior citizen hain" → set_senior_parent:true
+- "mummy 60+ hain, health insurance deduction chahiye" → set_senior_parent:true
+- "senior citizen parent nahi hai" → set_senior_parent:false
+- "parent ki age 55 hai" → set_senior_parent:false
 - "18% GST ke saath 5000 ka saman liya" → gst_action:"log_expense", gst_base_amount:5000, gst_rate:18, gst_description:"purchase"
 - "office laptop 80000 + 18 percent GST" → gst_action:"log_expense", gst_base_amount:80000, gst_rate:18, gst_description:"office laptop"
 - "is mahine ka GST dikhao" or "GST input summary" → gst_action:"summary"

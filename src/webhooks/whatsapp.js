@@ -5,7 +5,9 @@ const { findOrCreateUser, addFamilyMember, removeFamilyMember, updateUserName } 
 const { understandMessage } = require('../services/claude');
 const { transcribeVoiceMessage } = require('../services/whisper');
 const { logExpense, handleQuery, handleSetBudget } = require('../services/expenses');
-const { deleteLastExpense, deleteExpenseByAmount, getLastExpense } = require('../models/expense');
+const { deleteLastExpense, deleteExpenseByAmount, getLastExpense,
+        updateLastExpenseAmount, updateExpenseAmount,
+        getExpenses, getMonthExpenses, getWeekExpenses } = require('../models/expense');
 const { sendMessage, sendFile } = require('../services/whatsapp');
 const { formatVoiceConfirmation } = require('../utils/formatter');
 const twilioValidate = require('../middleware/twilioValidate');
@@ -22,7 +24,7 @@ const {
   parseDayName, parseHour, DAY_NAMES
 } = require('../services/weeklyReport');
 const {
-  exportCustomerExcel, exportFullLedgerExcel,
+  exportCustomerExcel, exportFullLedgerExcel, exportExpenseExcel,
   exportCustomerPDF, exportFullLedgerPDF, deleteTempFile
 } = require('../services/export');
 const {
@@ -201,6 +203,40 @@ async function handleTextMessage(user, fromNumber, text) {
       console.error('[Delete] Error:', err.message);
       await sendMessage(fromNumber, `❌ Delete nahi hua. Dobara try karo.`);
     }
+    return;
+  }
+
+  // ── Expense edit / correct amount ──
+  if (parsed.expense_edit && parsed.edit_new_amount > 0) {
+    await handleExpenseEdit(user, fromNumber, parsed);
+    return;
+  }
+
+  // ── Senior citizen parent flag ──
+  if (parsed.set_senior_parent !== null && parsed.set_senior_parent !== undefined) {
+    const flag = Boolean(parsed.set_senior_parent);
+    await updateTaxProfile(user.id, { hasSeniorParent: flag });
+    if (flag) {
+      await sendMessage(fromNumber,
+        `✅ *Senior citizen parent flag set!*\n\n` +
+        `👴 Ab aapke parents (60+ age) ke liye:\n` +
+        `• 80D deduction limit: *₹50,000* (instead of ₹25,000)\n` +
+        `• Health insurance premium higher limit milega\n\n` +
+        `_"parents ki health insurance 25000" — abhi log karo!_\n` +
+        `_"tax kitna banega?" — revised estimate ke liye_`
+      );
+    } else {
+      await sendMessage(fromNumber,
+        `✅ Senior citizen parent flag remove kar diya.\n\n` +
+        `_80D parents limit: ₹25,000 (standard) apply hogi ab._`
+      );
+    }
+    return;
+  }
+
+  // ── Expense history Excel export ──
+  if (parsed.expense_export) {
+    await handleExpenseExport(user, fromNumber, parsed);
     return;
   }
 
@@ -545,6 +581,20 @@ _Kirana shop, friends, family — sab ke liye!_
 
 📸 *Receipt Auto-log:*
 • _Bill/receipt ki photo bhejo — automatically log ho jaayega!_
+
+✏️ *Expense Edit (galat amount?):*
+• "last entry 300 thi, 200 tha actually"
+• "500 wali entry 450 thi"
+• "last wali galat hai, 150 tha"
+
+📥 *Expense History Export:*
+• "is mahine ka expense Excel download karo"
+• "poora kharcha history download"
+• "is hafte ka expense excel"
+
+👴 *Senior Citizen Parent (80D):*
+• "mere mummy senior citizen hain" → ₹50,000 limit
+• "parents ki age 60+ hai"
 
 🔔 *Reminders:*
 • "reminders dikhao" — upcoming alerts
@@ -1323,6 +1373,107 @@ async function handleGSTAction(user, fromNumber, parsed) {
   } catch (err) {
     console.error('[GST] Error:', err.message);
     await sendMessage(fromNumber, `❌ Kuch gadbad ho gayi. Dobara try karo.`);
+  }
+}
+
+// ──────────────────────────────────────────────────────────
+// EXPENSE EDIT HANDLER
+// ──────────────────────────────────────────────────────────
+async function handleExpenseEdit(user, fromNumber, parsed) {
+  try {
+    let result = null;
+
+    if (parsed.edit_last) {
+      result = await updateLastExpenseAmount(user.id, parsed.edit_new_amount);
+    } else if (parsed.edit_old_amount > 0) {
+      result = await updateExpenseAmount(user.id, parsed.edit_old_amount, parsed.edit_new_amount);
+    }
+
+    if (!result) {
+      await sendMessage(fromNumber,
+        `❌ Expense nahi mila update karne ke liye.\n\n` +
+        `_Try karo:_\n` +
+        `• "last entry 300 thi, 200 tha" — last entry update\n` +
+        `• "500 wali entry 450 thi" — amount se dhundho`
+      );
+      return;
+    }
+
+    const { old: oldExp, updated } = result;
+    const catLabel = (updated.category || 'other');
+    const desc     = updated.description || catLabel;
+
+    await sendMessage(fromNumber,
+      `✅ *Expense updated!*\n\n` +
+      `📝 ${desc}\n` +
+      `❌ ~~₹${fmtAmt(oldExp.amount)}~~ → ✅ *₹${fmtAmt(updated.amount)}*\n\n` +
+      `_Sahi amount save ho gaya!_ 🎉`
+    );
+  } catch (err) {
+    console.error('[ExpenseEdit] Error:', err.message);
+    await sendMessage(fromNumber, `❌ Update nahi hua. Dobara try karo.`);
+  }
+}
+
+// ──────────────────────────────────────────────────────────
+// EXPENSE EXPORT HANDLER
+// ──────────────────────────────────────────────────────────
+async function handleExpenseExport(user, fromNumber, parsed) {
+  try {
+    const period = parsed.export_period || 'monthly';
+    let expenses = [];
+    let periodLabel = '';
+
+    const now = new Date();
+
+    if (period === 'weekly') {
+      const day = now.getDay();
+      const diffToMon = (day === 0 ? -6 : 1 - day);
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + diffToMon);
+      monday.setHours(0, 0, 0, 0);
+      const nextMon = new Date(monday);
+      nextMon.setDate(monday.getDate() + 7);
+      expenses = await getExpenses({ userId: user.id, startDate: monday.toISOString(), endDate: nextMon.toISOString(), limit: 500 });
+      periodLabel = `Is hafte ka kharcha — ${monday.toLocaleDateString('en-IN', { day:'2-digit', month:'short' })} to ${new Date(nextMon - 1).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}`;
+    } else if (period === 'monthly') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end   = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      expenses = await getExpenses({ userId: user.id, startDate: start.toISOString(), endDate: end.toISOString(), limit: 500 });
+      periodLabel = `${now.toLocaleString('en-IN', { month:'long', year:'numeric' })} — Monthly Expense Report`;
+    } else {
+      // all — last 6 months
+      const start = new Date(now);
+      start.setMonth(start.getMonth() - 6);
+      start.setDate(1);
+      expenses = await getExpenses({ userId: user.id, startDate: start.toISOString(), limit: 1000 });
+      periodLabel = `Poori history — ${start.toLocaleDateString('en-IN', { month:'short', year:'numeric' })} to ${now.toLocaleDateString('en-IN', { month:'short', year:'numeric' })}`;
+    }
+
+    if (expenses.length === 0) {
+      await sendMessage(fromNumber,
+        `📭 Is period mein koi expense nahi mila.\n\n` +
+        `_Pehle kharcha log karo: "chai 30"_`
+      );
+      return;
+    }
+
+    await sendMessage(fromNumber, `⏳ Expense Excel generate ho raha hai... thoda wait karo 📊`);
+
+    const filePath = await exportExpenseExcel(expenses, periodLabel, user.name);
+    const fileName = `KharchaAI_${period === 'weekly' ? 'Weekly' : period === 'monthly' ? now.toLocaleString('en-IN', { month:'short', year:'numeric' }).replace(' ', '_') : 'History'}_Expenses.xlsx`;
+
+    await sendFile(fromNumber, filePath, fileName);
+    deleteTempFile(filePath);
+
+    await sendMessage(fromNumber,
+      `✅ *${expenses.length} entries exported!*\n\n` +
+      `📊 ${periodLabel}\n\n` +
+      `_Excel mein category-wise breakdown bhi hai!_ 📋`
+    );
+  } catch (err) {
+    console.error('[ExpenseExport] Error:', err.message);
+    await sendMessage(fromNumber, `❌ Export nahi hua. Dobara try karo.`);
   }
 }
 
