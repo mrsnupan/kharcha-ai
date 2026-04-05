@@ -46,7 +46,8 @@ const MAX_MESSAGE_LENGTH = 1000; // prevent prompt injection via huge messages
 router.use(twilioValidate);
 router.post('/', async (req, res) => {
   // Respond 200 immediately so Twilio doesn't retry
-  res.sendStatus(200);
+  // Use .end() — sendStatus(200) sends "OK" body which Twilio relays as a message
+  res.status(200).end();
 
   const body = req.body;
   const fromNumber = body.From;       // "whatsapp:+919876543210"
@@ -309,17 +310,26 @@ async function handleTextMessage(user, fromNumber, text) {
 // Voice message handler
 // ──────────────────────────────────────────────────────────
 async function handleVoiceMessage(user, fromNumber, mediaUrl) {
+  // Send instant feedback so user knows we're processing
+  await sendMessage(fromNumber, "🎤 _Sun raha hoon..._");
+
   let transcript;
   try {
     transcript = await transcribeVoiceMessage(mediaUrl);
   } catch (err) {
     console.error('[Whisper error]', err.message);
-    await sendMessage(fromNumber, "Voice message sun nahi paya 😢 Please text mein likhkar bhejo.");
+    await sendMessage(fromNumber,
+      `❌ Voice samajh nahi aaya.\n\n` +
+      `_Try karo:_\n` +
+      `• Thoda zyada clearly bolo\n` +
+      `• Background noise kam karo\n` +
+      `• Ya text mein type karo 📝`
+    );
     return;
   }
 
   if (!transcript || transcript.length < 2) {
-    await sendMessage(fromNumber, "Voice clear nahi thi. Dobara try karo 🎤");
+    await sendMessage(fromNumber, "🎤 Voice clear nahi thi. Dobara try karo ya text mein type karo.");
     return;
   }
 

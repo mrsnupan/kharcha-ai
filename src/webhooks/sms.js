@@ -28,7 +28,7 @@ const { addRechargeReminder } = require('../services/reminderCron');
  * app registration (OTP flow). User never sees this.
  */
 router.post('/', async (req, res) => {
-  res.sendStatus(200); // Acknowledge immediately — never block the app
+  res.status(200).end(); // Acknowledge immediately — never block the app
 
   const { message, from: senderId, received_at } = req.body;
   const rawSMS = message || '';
